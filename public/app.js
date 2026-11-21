@@ -116,9 +116,9 @@ function simRows(reports, detailed = false) {
     const character = member
       ? `<a href="/character/${encodeURIComponent(member.slug)}" data-nav>${esc(member.name)}</a>`
       : esc(report.characterName ?? "Former guild member");
-    const href = validUrl(report.url, ["www.raidbots.com", "raidbots.com", "mimiron.raidbots.com"]);
+    const href = validUrl(report.url, ["mythicsim.com", "www.mythicsim.com", "www.raidbots.com", "raidbots.com", "mimiron.raidbots.com"]);
     return `<div class="sim-row line">
-      <div><strong>${character}</strong><p class="subtle">${esc(report.scenario)} · ${report.dateKind === "imported" ? "Imported " : ""}${dateLabel(report.date)}</p></div>
+      <div><strong>${character}</strong><p class="subtle">${report.provider ? `${esc(report.provider)} · ` : ""}${esc(report.scenario)} · ${report.dateKind === "imported" ? "Imported " : ""}${dateLabel(report.date)}</p></div>
       <span class="sim-number">${number.format(report.dps)}<small>DPS</small></span>
       ${detailed && href ? `<a class="link" href="${href}" target="_blank" rel="noopener">View report</a>` : ""}</div>`;
   }).join("") + "</div>";
@@ -244,20 +244,23 @@ function characterPage(character, { reports, reportError }) {
 }
 
 function simulations({ reports, reportError }) {
-  const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Import Raidbots report</button>' : "";
+  const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish MythicSim result</button>' : "";
+  const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever" target="_blank" rel="noopener">Open MythicSim</a>';
   const options = state.members.map(character => `<option value="${esc(character.slug)}">${esc(character.name)}</option>`).join("");
-  return intro("DPS simulations", "See the latest shared DPS for each guild member and open their original reports.", { action: importButton }) + `
+  return intro("DPS simulations", "Run a WoW Forever Quick Sim on MythicSim and share the result with Warfare.", { action: openSimulator + importButton }) + `
     <div class="frame content">
       ${sourceNote()}
       ${reportError ? notice(reportError) : ""}
       ${status ? notice(status) : ""}
       ${panel("Report history", "Newest first · Compare DPS using matching encounter settings", simRows(reports, true) +
-      '<p class="panel-note">Saved DPS summaries remain available if the original Raidbots report expires.</p>')}
+      '<p class="panel-note">Saved DPS summaries remain available if the original result link expires.</p>')}
       ${importButton ? `<dialog aria-labelledby="import-title"><form data-report-form>
-        <h2 id="import-title" class="section-title">Import Raidbots report</h2>
-        <p class="subtle">Import a completed Quick Sim run for your WoW Forever character. The report URL is visible to site visitors.</p>
+        <h2 id="import-title" class="section-title">Publish MythicSim result</h2>
+        <p class="subtle">Run Quick Sim in MythicSim, then copy the result page URL from the address bar and enter its displayed DPS. The link and DPS are visible to site visitors.</p>
         <label>Character <select required name="character"><option value="">Choose a character</option>${options}</select></label>
-        <label>Raidbots report URL <input type="url" name="url" placeholder="https://www.raidbots.com/simbot/report/…" maxlength="240" required></label>
+        <label>MythicSim result URL <input type="url" name="url" placeholder="https://mythicsim.com/sims/…" maxlength="240" required></label>
+        <label>Simulated DPS <input type="number" name="dps" inputmode="decimal" min="0.01" max="1000000000" step="any" placeholder="DPS shown on the result" required></label>
+        <label>Encounter settings (optional) <input name="scenario" maxlength="100" placeholder="e.g. Single target, 2 minutes"></label>
         <label>Guild publishing key <input type="password" name="token" autocomplete="off" maxlength="256" required></label>
         <p class="form-status" role="status"></p>
         <div class="actions"><button class="button primary" type="submit">Publish report</button><button class="button" type="button" data-report-close>Cancel</button></div>
@@ -268,20 +271,20 @@ function simulations({ reports, reportError }) {
 async function submitReport(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const { character, token, url } = Object.fromEntries(new FormData(form));
+  const { character, token, url, dps, scenario } = Object.fromEntries(new FormData(form));
   const button = form.querySelector('[type="submit"]');
   const feedback = form.querySelector(".form-status");
   button.disabled = true;
-  feedback.textContent = "Reading Raidbots report…";
+  feedback.textContent = "Saving MythicSim result…";
   try {
     const response = await fetch("/api/reports", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ character, url })
+      body: JSON.stringify({ character, url, dps: Number(dps), scenario })
     });
     const result = await response.json();
     if (!response.ok) throw Error(result.error ?? "The report could not be saved.");
-    status = "Raidbots report saved.";
+    status = "MythicSim result saved.";
     await render(false);
   } catch (error) {
     feedback.textContent = error.message;

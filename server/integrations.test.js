@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalizeGear, normalizeProfessions, normalizeTalents } from "./armory.js";
-import { importReport, parseReport, reportReference } from "./reports.js";
+import { importReport, reportDetails, reportReference } from "./reports.js";
 
 test("Forever profile normalization uses the active specialization group and talent ranks", () => {
   const result = normalizeTalents({ specialization_groups: [
@@ -15,23 +15,34 @@ test("Forever profile normalization uses the active specialization group and tal
   assert.equal(normalizeProfessions({ primaries: [{ profession: { name: "Mining" }, tiers: [{ skill_points: 284, max_skill_points: 300 }] }] })[0].current, 284);
 });
 
-const reference = reportReference("https://www.raidbots.com/simbot/report/Example123?share=true");
-const member = { id: 22, name: "Tharok Ironhide" };
-const quickSim = { simbot: { type: "quick", createdAt: "2026-11-18T18:00:00Z" }, sim: {
-  options: { max_time: 300, fight_style: "Patchwerk", desired_targets: 1 },
-  players: [{ name: "Tharok Ironhide", collected_data: { dps: { mean: 1234.5 } } }]
-} };
+const simId = "06d928d0-e422-4de0-a4a6-e2d2a8204039";
+const resultUrl = `https://mythicsim.com/sims/${simId}`;
 
-test("report parser rejects unrelated hosts, other characters, and gear-comparison reports", () => {
-  assert.throws(() => reportReference("https://raidbots.com.example.org/simbot/report/Example123"), { status: 422 });
-  assert.throws(() => parseReport(quickSim, { id: 23, name: "Other Person" }, reference), { status: 422 });
-  assert.throws(() => parseReport({ ...quickSim, simbot: { type: "top_gear" } }, member, reference), { status: 422 });
-  assert.equal(reference.url, "https://www.raidbots.com/simbot/report/Example123");
-  const parsed = parseReport(quickSim, member, reference);
-  assert.equal(parsed.dps, 1234.5);
-  assert.equal(parsed.scenario, "Patchwerk · 1 target · 5m 0s");
-  assert.equal(parsed.report_date, "2026-11-18T18:00:00.000Z");
-  assert.equal(parseReport({ ...quickSim, simbot: { type: "quick" } }, member, reference).report_date, null);
+test("only MythicSim result URLs are accepted for new reports", () => {
+  const reference = reportReference(`https://www.mythicsim.com/sims/${simId.toUpperCase()}/?ref=share#dps`);
+  assert.equal(reference.url, resultUrl);
+  assert.equal(reference.id, "ms06d928d0e4224de0a4a6e2d2a8204039");
+  for (const url of [
+    `https://mythicsim.com.example.org/sims/${simId}`,
+    `https://mythicsim.com@evil.example/sims/${simId}`,
+    `https://mythicsim.com:444/sims/${simId}`,
+    `https://mythicsim.com/sims/${simId}/extra`,
+    `http://mythicsim.com/sims/${simId}`,
+    "https://mythicsim.com/wow-forever/sim",
+    "https://www.raidbots.com/simbot/report/Example123"
+  ]) {
+    assert.throws(() => reportReference(url), { status: 422 }, url);
+  }
+});
+
+test("published sim values require positive numerical DPS and normalize encounter settings", () => {
+  assert.deepEqual(reportDetails({ dps: 523.7, scenario: "  Single target,   2 minutes " }),
+    { dps: 523.7, scenario: "Single target, 2 minutes" });
+  assert.deepEqual(reportDetails({ dps: 523.7 }), { dps: 523.7, scenario: "Quick Sim" });
+  for (const invalid of [undefined, null, "523.7", 0, -1, Infinity, 1_000_000_001]) {
+    assert.throws(() => reportDetails({ dps: invalid }), { status: 422 });
+  }
+  assert.throws(() => reportDetails({ dps: 523.7, scenario: "x".repeat(101) }), { status: 422 });
 });
 
 test("report imports fail closed without configuration", async () => {

@@ -1,6 +1,6 @@
 # Warfare | WoW Forever
 
-A responsive, Horde-themed guild site with a searchable roster, individual equipment and talent profiles, profession skills, and archived Raidbots DPS results. The preview uses fictional characters and clearly labels them.
+A responsive, Horde-themed guild site with a searchable roster, individual equipment and talent profiles, profession skills, and archived MythicSim DPS results. The preview uses fictional characters and clearly labels them.
 
 ## Development
 
@@ -26,7 +26,7 @@ Import the repository as a Vercel project using the **Other** framework preset. 
 
 The API uses the regional Forever profile namespace. The roster and character responses refresh through Vercel’s edge cache with a five-minute TTL. Blizzard controls when character gear, talents, and professions become visible. Characters below level 10 can appear on the roster before their profile is available. Live connection problems display a status message.
 
-## Share and archive Raidbots reports
+## Share and archive MythicSim results
 
 Apply [the schema](supabase/schema.sql) to a dedicated Supabase project. Add the following server-side environment variables and redeploy once the live Armory is configured.
 
@@ -36,6 +36,6 @@ Apply [the schema](supabase/schema.sql) to a dedicated Supabase project. Add the
 | `SUPABASE_SECRET_KEY` | A server-only Supabase secret key or legacy service-role key. |
 | `GUILD_REPORT_TOKEN` | A randomly generated key of at least 24 characters. Share it with the guild members who can publish reports. |
 
-On **Simulations**, select **Import Raidbots report**, choose the character, and paste the share URL for a completed Quick Sim. The site reads the public Raidbots report, checks for a matching player and DPS result, and stores a deduplicated summary with encounter settings and a link. It uses the author-provided report date when available and labels the import date otherwise. The overview shows the newest report per character from the 250 most recent reports. Character pages show that character’s history from the same window. Source links can expire according to [Raidbots’ retention policy](https://support.raidbots.com/article/76-report-storage).
+Run a WoW Forever Quick Sim at [MythicSim](https://mythicsim.com/wow-forever). Once it completes, copy the result URL from the address bar. On Warfare’s **Simulations** page, select **Publish MythicSim result**, choose the character, and enter the result URL, the displayed DPS, encounter settings if available, and the guild publishing key. The site saves the submitted DPS and a link to the source, deduplicates reports by their MythicSim result ID, and displays the date a report was added. Guild members run their sims in MythicSim and enter each new result. Use the same encounter settings when comparing DPS.
 
-Raidbots documents [reading existing reports](https://www.raidbots.com/developers). Forever simulation support needs confirmation with a real report from the guild’s game version. Use results from the same game version and encounter settings when comparing DPS. Guild members run their own sims and share each new report for publication.
+The overview shows the newest report per character from the 250 most recent reports. Character pages show that character’s history from the same window. Previously saved reports keep their original source links. MythicSim links may expire under its [retention policy](https://mythicsim.com/privacy).
