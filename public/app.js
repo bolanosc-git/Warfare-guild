@@ -181,7 +181,8 @@ function overview({ reports, reportError }) {
 
 function roster() {
   const classes = [...new Set(state.members.map(character => character.className))].sort();
-  return intro("Guild roster", "Browse Warfare’s characters, gear, talents, and professions.") + `
+  const armoryLink = '<a class="button" href="https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/guild/warfare" target="_blank" rel="noopener">View live roster on Blizzard Armory</a>';
+  return intro("Guild roster", "Browse Warfare’s characters, gear, talents, and professions.", { action: armoryLink }) + `
     <div class="frame content">
       ${sourceNote()}
       <form class="page-toolbar" data-roster-filters>
