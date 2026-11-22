@@ -1,3 +1,5 @@
+import { esc, validUrl, dateLabel, intro, panel } from "./ui.js";
+import { bindPlanning, planningPage, profileTabs } from "./planning.js";
 import { demoCharacter, demoMembers, demoReports } from "./demo.js";
 
 const icons = {
@@ -20,7 +22,6 @@ const classStyles = {
 };
 const main = document.querySelector("#main");
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
-const dateStyle = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 let state;
 let renderRequest = 0;
 let lastFetch = 0;
@@ -28,25 +29,6 @@ let status = "";
 
 function icon(name) {
   return `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[name] ?? icons.shield}</svg>`;
-}
-
-function esc(value) {
-  const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-  return String(value ?? "").replace(/[&<>"']/g, character => entities[character]);
-}
-
-function validUrl(value, allowedHosts) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && allowedHosts.includes(url.hostname) ? esc(url.href) : "";
-  } catch {
-    return "";
-  }
-}
-
-function dateLabel(value) {
-  const date = new Date(value);
-  return value && !Number.isNaN(date.getTime()) ? dateStyle.format(date) : "Date unavailable";
 }
 
 async function get(path) {
@@ -138,19 +120,6 @@ function metric(symbol, value, label) {
     <span><strong>${esc(value)}</strong><small>${esc(label)}</small></span></div>`;
 }
 
-function panel(title, description, body, action = "") {
-  return `<section class="panel"><div class="panel-heading"><div><h2>${esc(title)}</h2>${description ? `<p>${esc(description)}</p>` : ""}</div>${action}</div>${body}</section>`;
-}
-
-function intro(title, subtitle, options = {}) {
-  return `<section class="page-intro"><div class="frame">
-    ${options.back ? '<a class="back" href="/roster" data-nav>Back to roster</a>' : ""}
-    <p class="eyebrow">${esc(options.eyebrow ?? "Warfare · Horde")}</p>
-    <h1>${esc(title)}</h1><p>${esc(subtitle)}</p>
-    ${options.action ? `<div class="actions">${options.action}</div>` : ""}
-    </div></section>`;
-}
-
 function overview({ reports, reportError }) {
   const guildClassCount = new Set(state.members.map(member => member.className)).size;
   const latest = latestReports(reports).slice(0, 4);
@@ -230,6 +199,7 @@ function characterPage(character, { reports, reportError }) {
   return intro(character.name, label, { back: true, eyebrow: "Warfare armory", action: armory ? `<a class="button" href="${armory}" target="_blank" rel="noopener">Blizzard Armory</a>` : "" }) + `
     <div class="frame content">
       ${sourceNote()}
+      ${profileTabs(character, false)}
       ${character.profileUnavailable ? notice(character.profileUnavailable) : ""}
       <div class="profile-grid">
         ${panel("Equipment", character.itemLevel ? `Average item level ${character.itemLevel}` : "Equipped gear", gear)}
@@ -242,6 +212,8 @@ function characterPage(character, { reports, reportError }) {
       ${character.updatedAt ? `<p class="subtle">Armory snapshot · ${dateLabel(character.updatedAt)}</p>` : ""}
     </div>`;
 }
+
+const planningRoutes = { "/group-up": "group", "/calendar": "calendar", "/wishlists": "wishlists" };
 
 function simulations({ reports, reportError }) {
   const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish MythicSim result</button>' : "";
@@ -305,6 +277,7 @@ async function render(moveFocus = true) {
   try {
     if (!state || Date.now() - lastFetch > 300_000) await loadGuild();
     let result, title;
+    let completed = [];
     if (path === "/") {
       result = overview(await loadReports());
       title = "Warfare";
@@ -314,6 +287,13 @@ async function render(moveFocus = true) {
     } else if (path === "/simulations") {
       result = simulations(await loadReports());
       title = "DPS Simulations | Warfare";
+    } else if (planningRoutes[path] || /^\/character\/[^/]+\/progress$/.test(path)) {
+      const view = planningRoutes[path] ?? "character";
+      const slug = view === "character" ? decodeURIComponent(path.split("/")[2]) : null;
+      const character = slug ? state.members.find(member => member.slug === slug) : null;
+      const query = view === "character" ? `character&slug=${encodeURIComponent(slug)}` : view === "wishlists" ? "group" : view;
+      const data = slug && !character ? {} : await get(`/api/planning?view=${query}`) ?? {};
+      ({ result, title, completed } = planningPage(view, data, state.members, character, status));
     } else if (path.startsWith("/character/")) {
       const slug = decodeURIComponent(path.slice("/character/".length));
       const [character, reports] = await Promise.all([
@@ -338,6 +318,11 @@ async function render(moveFocus = true) {
       filters.addEventListener("submit", event => event.preventDefault());
       updateRoster(filters);
     }
+    if (main.querySelector("[data-planning]")) bindPlanning(main, state.members, get, message => {
+      if (request !== renderRequest) return;
+      status = message;
+      render(false);
+    }, completed);
     const dialog = main.querySelector("dialog");
     main.querySelector("[data-report-open]")?.addEventListener("click", () => dialog.showModal());
     main.querySelector("[data-report-close]")?.addEventListener("click", () => dialog.close());

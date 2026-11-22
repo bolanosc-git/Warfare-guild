@@ -1,12 +1,12 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { armoryConfigured, getGuildMember } from "./armory.js";
 import { HttpError, readJson } from "./http.js";
+import { database, databaseConfigured as reportsConfigured, guildWritesEnabled as reportsWritable, validEditor } from "./database.js";
+
+export { reportsWritable };
 
 const mythicSimHosts = new Set(["mythicsim.com", "www.mythicsim.com"]);
 const raidbotsHosts = new Set(["raidbots.com", "www.raidbots.com", "mimiron.raidbots.com"]);
 const resultPath = /^\/sims\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
-export const reportsConfigured = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
-export const reportsWritable = () => reportsConfigured() && (process.env.GUILD_REPORT_TOKEN?.length ?? 0) >= 24;
 
 export function reportReference(value) {
   const message = "Paste the MythicSim result URL from the address bar after Quick Sim finishes.";
@@ -44,30 +44,10 @@ function publicReport(row) {
   };
 }
 
-async function database(search, options = {}) {
-  const origin = new URL(process.env.SUPABASE_URL);
-  if (origin.protocol !== "https:" || origin.username || origin.password) {
-    throw new HttpError(503, "The simulation database URL is invalid.");
-  }
-  const url = new URL("/rest/v1/guild_sim_reports", origin);
-  url.search = new URLSearchParams(search);
-  const key = process.env.SUPABASE_SECRET_KEY;
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      apikey: key, ...(key.startsWith("sb_secret_") ? {} : { Authorization: `Bearer ${key}` }),
-      ...options.headers
-    },
-    redirect: "error",
-    signal: AbortSignal.timeout(7500)
-  });
-  if (!response.ok) throw new HttpError(502, "The simulation database is temporarily unavailable.");
-  return response.json();
-}
 
 export async function getReports() {
   if (!reportsConfigured() || !armoryConfigured()) return [];
-  const rows = await database({
+  const rows = await database("guild_sim_reports", {
     select: "report_id,character_id,character_name,dps,scenario,report_url,report_date,imported_at",
     order: "sort_date.desc,report_id.desc",
     limit: "250"
@@ -75,13 +55,6 @@ export async function getReports() {
   return rows.map(publicReport);
 }
 
-function validEditor(request) {
-  const expected = process.env.GUILD_REPORT_TOKEN;
-  const presented = request.headers.get("Authorization")?.match(/^Bearer (.{1,256})$/i)?.[1];
-  if (!presented) return false;
-  const hash = value => createHash("sha256").update(value).digest();
-  return timingSafeEqual(hash(expected), hash(presented));
-}
 
 export async function importReport(request) {
   if (!reportsWritable() || !armoryConfigured()) throw new HttpError(503, "Guild report publishing has not been configured.");
@@ -91,7 +64,7 @@ export async function importReport(request) {
   const reference = reportReference(input.url);
   const details = reportDetails(input);
   const member = await getGuildMember(input.character);
-  const existing = await database({ report_id: `eq.${reference.id}`, limit: "1" });
+  const existing = await database("guild_sim_reports", { report_id: `eq.${reference.id}`, limit: "1" });
   if (existing.length) {
     if (existing[0].character_id !== member.id) throw new HttpError(409, "This report is already assigned to another character.");
     return publicReport(existing[0]);
@@ -104,13 +77,13 @@ export async function importReport(request) {
     imported_at: new Date().toISOString(),
     ...details
   };
-  const result = await database({ on_conflict: "report_id" }, {
+  const result = await database("guild_sim_reports", { on_conflict: "report_id" }, {
     method: "POST",
     headers: { "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates,return=representation" },
     body: JSON.stringify(row)
   });
   if (result.length) return publicReport(result[0]);
-  const [stored] = await database({ report_id: `eq.${reference.id}`, limit: "1" });
+  const [stored] = await database("guild_sim_reports", { report_id: `eq.${reference.id}`, limit: "1" });
   if (!stored || stored.character_id !== member.id) throw new HttpError(409, "This report is already assigned to another character.");
   return publicReport(stored);
 }

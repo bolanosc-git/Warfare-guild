@@ -5,7 +5,11 @@
   "rewrites": [
     { "source": "/roster", "destination": "/index.html" },
     { "source": "/simulations", "destination": "/index.html" },
-    { "source": "/character/:slug", "destination": "/index.html" }
+    { "source": "/group-up", "destination": "/index.html" },
+    { "source": "/calendar", "destination": "/index.html" },
+    { "source": "/wishlists", "destination": "/index.html" },
+    { "source": "/character/:slug", "destination": "/index.html" },
+    { "source": "/character/:slug/progress", "destination": "/index.html" }
   ],
   "headers": [
     { "source": "/(.*)", "headers": [

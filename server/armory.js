@@ -177,3 +177,69 @@ export async function getCharacter(slug) {
     professions: normalizeProfessions(professions.data)
   };
 }
+
+const activeQuestCache = new Map();
+
+function questEntries(entries) {
+  return list(entries).flatMap(entry => {
+    const quest = entry?.quest ?? entry;
+    return Number.isSafeInteger(quest?.id) ? [{ id: quest.id, name: localized(quest.name) || `Quest #${quest.id}` }] : [];
+  });
+}
+
+async function activeQuestLog(member) {
+  const previous = activeQuestCache.get(member.id);
+  if (previous?.expires > Date.now()) return previous.result;
+  const path = `/profile/wow/character/${encodeURIComponent(member.slug)}/quests`;
+  const result = blizzard(path).then(({ data, updatedAt }) => ({
+    available: data !== null,
+    quests: questEntries(data?.in_progress ?? data?.active_quests),
+    updatedAt: updatedAt || null
+  })).catch(() => ({ available: false, quests: [], updatedAt: null }));
+  activeQuestCache.set(member.id, { expires: Date.now() + 300_000, result });
+  return result;
+}
+
+const rejectUnreported = response => ({ data: response.status === "fulfilled" ? response.value.data : null });
+
+export async function getCharacterProgress(member) {
+  const path = `/profile/wow/character/${encodeURIComponent(member.slug)}`;
+  const [active, completedResponse, encountersResponse] = await Promise.allSettled([
+    activeQuestLog(member), blizzard(`${path}/quests/completed`), blizzard(`${path}/encounters/dungeons`)
+  ]);
+  const completed = rejectUnreported(completedResponse).data;
+  const encounters = rejectUnreported(encountersResponse).data;
+  return {
+    active: active.value ?? { available: false, quests: [], updatedAt: null },
+    completed: { available: completed !== null, quests: questEntries(completed?.quests) },
+    encounters: list(encounters?.expansions).flatMap(expansion => list(expansion.instances).flatMap(instance => {
+      const name = localized(instance.instance?.name);
+      const modes = list(instance.modes).filter(mode => mode.progress?.completed_count > 0);
+      if (!name || !modes.length) return [];
+      const fullClear = modes.some(mode => mode.progress.total_count > 0 && mode.progress.completed_count >= mode.progress.total_count);
+      return [{ name, status: fullClear ? "cleared" : "partial" }];
+    })),
+    checkedAt: new Date().toISOString()
+  };
+}
+
+export async function getQuestMatches() {
+  const { members } = await getGuild();
+  const eligible = members.filter(member => member.level >= 10);
+  const matches = new Map();
+  let checked = 0;
+  for (let index = 0; index < eligible.length; index += 8) {
+    const batch = eligible.slice(index, index + 8);
+    const logs = await Promise.all(batch.map(activeQuestLog));
+    logs.forEach((log, memberIndex) => {
+      if (!log.available) return;
+      checked++;
+      for (const quest of log.quests) {
+        if (!matches.has(quest.id)) matches.set(quest.id, { ...quest, characters: [] });
+        const characters = matches.get(quest.id).characters;
+        if (!characters.includes(batch[memberIndex].id)) characters.push(batch[memberIndex].id);
+      }
+    });
+  }
+  return { checked, matches: [...matches.values()].filter(quest => quest.characters.length > 1).sort((a, b) => b.characters.length - a.characters.length || a.name.localeCompare(b.name)) };
+}
