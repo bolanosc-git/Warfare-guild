@@ -1,8 +1,8 @@
 import { armoryConfigured, getGuildMember } from "./armory.js";
 import { HttpError, readJson } from "./http.js";
-import { database, databaseConfigured as reportsConfigured, guildWritesEnabled as reportsWritable, validEditor } from "./database.js";
+import { database, databaseConfigured } from "./database.js";
 
-export { reportsWritable };
+export const reportsWritable = () => databaseConfigured() && armoryConfigured();
 
 const mythicSimHosts = new Set(["mythicsim.com", "www.mythicsim.com"]);
 const raidbotsHosts = new Set(["raidbots.com", "www.raidbots.com", "mimiron.raidbots.com"]);
@@ -46,7 +46,7 @@ function publicReport(row) {
 
 
 export async function getReports() {
-  if (!reportsConfigured() || !armoryConfigured()) return [];
+  if (!reportsWritable()) return [];
   const rows = await database("guild_sim_reports", {
     select: "report_id,character_id,character_name,dps,scenario,report_url,report_date,imported_at",
     order: "sort_date.desc,report_id.desc",
@@ -57,8 +57,7 @@ export async function getReports() {
 
 
 export async function importReport(request) {
-  if (!reportsWritable() || !armoryConfigured()) throw new HttpError(503, "Guild report publishing has not been configured.");
-  if (!validEditor(request)) throw new HttpError(401, "The guild publishing key is invalid.");
+  if (!reportsWritable()) throw new HttpError(503, "Guild report publishing has not been configured.");
   const input = await readJson(request, 4096).catch(() => null);
   if (!input || typeof input.character !== "string") throw new HttpError(422, "Choose a character and enter a MythicSim result URL.");
   const reference = reportReference(input.url);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalizeGear, normalizeProfessions, normalizeTalents } from "./armory.js";
-import { importReport, reportDetails, reportReference } from "./reports.js";
+import { importReport, reportDetails, reportReference, reportsWritable } from "./reports.js";
 
 test("Forever profile normalization uses the active specialization group and talent ranks", () => {
   const result = normalizeTalents({ specialization_groups: [
@@ -46,6 +46,6 @@ test("published sim values require positive numerical DPS and normalize encounte
 });
 
 test("report imports fail closed without configuration", async () => {
-  if (process.env.GUILD_REPORT_TOKEN) return;
+  if (reportsWritable()) return;
   await assert.rejects(importReport(new Request("http://localhost/api/reports", { method: "POST" })), { status: 503 });
 });

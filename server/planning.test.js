@@ -19,7 +19,7 @@ test("a Warcraft Logs import requires a matching character, dungeon, and boss ki
 
 test("guild planning exposes synchronized quests and validates writes", async t => {
   const values = {
-    BLIZZARD_CLIENT_ID: "fixture", BLIZZARD_CLIENT_SECRET: "fixture", GUILD_REPORT_TOKEN: "development-fixture-key-only",
+    BLIZZARD_CLIENT_ID: "fixture", BLIZZARD_CLIENT_SECRET: "fixture",
     SUPABASE_URL: "https://fixture.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_fixture"
   };
   const prior = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
@@ -56,16 +56,17 @@ test("guild planning exposes synchronized quests and validates writes", async t 
   });
   const endpoint = "http://localhost/api/planning";
   const read = async (query) => (await GET(new Request(endpoint+query))).json();
-  const send = (body, token = values.GUILD_REPORT_TOKEN) => POST(new Request(endpoint, {
-    method: "POST", headers: { Authorization: `Bearer ${token}` },
+  const send = body => POST(new Request(endpoint, {
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ character: "grum-stormcaller", ...body })
   }));
   const profile = await read("?view=character&slug=grum-stormcaller");
+  assert.equal(profile.writable, true);
   assert.equal(profile.progress.active.quests[0].name, "Shared quest");
   assert.equal(profile.progress.completed.quests[0].name, "Turned in");
   const group = await read("?view=quests");
   assert.deepEqual(group.matches[0].characters, [1, 2]);
-  assert.equal((await send({ action: "need", dungeon: "ragefire-chasm" }, "wrong")).status, 401);
+  assert.equal((await send({ character: "missing-member", action: "need", dungeon: "ragefire-chasm" })).status, 404);
   assert.equal((await send({ action: "dungeon", dungeon: "unknown", progress: "cleared" })).status, 422);
   assert.equal((await send({ action: "dungeon", dungeon: "ragefire-chasm", progress: "cleared" })).status, 200);
   assert.equal((await send({ action: "unlock", step: "dalaran-horde-1", done: true })).status, 200);

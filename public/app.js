@@ -6,7 +6,6 @@ const icons = {
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/>',
   swords: '<path d="m3 3 5 1 12 12m-4 0 4 4m-7-2 5-5M21 3l-5 1-4.2 4.2M9.4 10.6 4 16m4 0-4 4m7-2-5-5"/>',
   pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
-  flag: '<path d="M5 22V3c6-5 8 5 15 0v11c-7 5-9-5-15 0"/>',
   shield: '<path d="M12 22s7-3 7-9V5l-7-3-7 3v8c0 6 7 9 7 9Z"/>',
   flame: '<path d="M13 2c2 6-2 7 2 10 0-2 2-3 3-4 3 5 2 13-6 14-6 0-9-4-8-8 1-4 5-5 5-9 1 1 3 3 3 5 2-3 2-6 1-8Z"/>',
   bolt: '<path d="m13 2-8 12h6l-1 8 9-12h-6l1-8Z"/>',
@@ -16,9 +15,9 @@ const icons = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>'
 };
 const classStyles = {
-  Warrior: ["#daaa80", "swords"], Rogue: ["#ecc771", "swords"], Mage: ["#8ad4ec", "bolt"],
-  Shaman: ["#8bb1fa", "bolt"], Hunter: ["#aace8d", "crosshair"], Warlock: ["#bca1ef", "flame"],
-  Priest: ["#f3e5da", "plus"], Druid: ["#f39760", "leaf"], Paladin: ["#f29ec0", "shield"]
+  Warrior: ["#79502c", "swords"], Rogue: ["#735912", "swords"], Mage: ["#236580", "bolt"],
+  Shaman: ["#31528c", "bolt"], Hunter: ["#496225", "crosshair"], Warlock: ["#644681", "flame"],
+  Priest: ["#65594b", "plus"], Druid: ["#8d4522", "leaf"], Paladin: ["#8d4262", "shield"]
 };
 const main = document.querySelector("#main");
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
@@ -42,6 +41,7 @@ async function get(path) {
 async function loadGuild() {
   const data = await get("/api/guild");
   state = data ?? { mode: "demo", faction: "Horde", members: demoMembers, reportWritable: false };
+  document.querySelector(".faction").textContent = ["Horde", state.ruleset ? `Americas ${state.ruleset}` : ""].filter(Boolean).join(" · ");
   lastFetch = Date.now();
 }
 
@@ -55,7 +55,7 @@ async function loadReports() {
 }
 
 function activeNav(path) {
-  document.querySelectorAll("nav [data-nav]").forEach(link => {
+  document.querySelectorAll(".site-header nav [data-nav]").forEach(link => {
     const href = link.getAttribute("href");
     if (href === path || (href === "/roster" && path.startsWith("/character/"))) {
       link.setAttribute("aria-current", "page");
@@ -74,17 +74,24 @@ function sourceNote() {
 }
 
 function classStyle(character) {
-  return classStyles[character.className] ?? ["#dbc0b2", "shield"];
+  return classStyles[character.className] ?? ["#705548", "shield"];
+}
+
+function characterMark(character) {
+  const [color, symbol] = classStyle(character);
+  return `<span class="class-icon" style="--class:${color}">${icon(symbol)}</span>`;
 }
 
 function rosterRows(members, full = false) {
   if (!members.length) return '<p class="empty">No matching characters.</p>';
-  return `<div class="roster-row roster-label"><span>Character</span><span>Class</span>${full ? "<span>Rank</span>" : ""}<span class="level">Lv</span></div>` +
+  return `<div class="roster-row roster-label"><span>Character</span><span>Class</span>${full ? '<span class="rank">Rank</span>' : ""}<span class="level">Level</span></div>` +
     members.map(character => {
-      const [color, symbol] = classStyle(character);
+      const [color] = classStyle(character);
       const rank = character.rank === 0 ? "Guild Master" : Number.isInteger(character.rank) ? `Rank ${character.rank}` : "—";
+      const caption = full ? [character.className, rank === "—" ? character.race : rank].filter(Boolean).join(" · ") :
+        character.rank === 0 ? rank : character.race || "Horde";
       return `<a class="roster-row line" href="/character/${encodeURIComponent(character.slug)}" data-nav style="--class:${color}">
-        <span class="person"><span class="class-icon">${icon(symbol)}</span><strong>${esc(character.name)}</strong></span>
+        <span class="person">${characterMark(character)}<span><strong>${esc(character.name)}</strong><small${full ? ' class="mobile-caption"' : ""}>${esc(caption)}</small></span></span>
         <span class="class-name">${esc(character.className)}</span>${full ? `<span class="rank">${rank}</span>` : ""}
         <span class="level">${esc(character.level ?? "—")}</span></a>`;
     }).join("");
@@ -115,36 +122,39 @@ function latestReports(reports) {
   });
 }
 
-function metric(symbol, value, label) {
-  return `<div class="metric"><span class="metric-icon">${icon(symbol)}</span>
-    <span><strong>${esc(value)}</strong><small>${esc(label)}</small></span></div>`;
+function atlasEntry(symbol, title, description, label, href) {
+  return `<a class="atlas-entry line" href="${href}" data-nav>
+    <span class="atlas-entry-icon">${icon(symbol)}</span>
+    <div><h3>${title}</h3><p>${description}</p><span class="link">${label}</span></div>
+  </a>`;
 }
 
 function overview({ reports, reportError }) {
   const guildClassCount = new Set(state.members.map(member => member.className)).size;
   const latest = latestReports(reports).slice(0, 4);
-  const description = "Guild roster, character builds, and raid preparation.";
+  const guildSize = `${state.members.length} ${state.members.length === 1 ? "character" : "characters"} · ${guildClassCount} ${guildClassCount === 1 ? "class" : "classes"}`;
   return `
-    <section class="hero"><div class="frame hero-content">
-      <p class="eyebrow">World of Warcraft: Forever</p>
-      <h1>Warfare</h1>
-      <p class="hero-tagline">For the Horde</p>
-      <p class="hero-description">${description}</p>
-      <div class="actions">
-        <a class="button primary" href="/roster" data-nav>${icon("users")} Explore roster</a>
-        <a class="button" href="/simulations" data-nav>${icon("pulse")} View simulations</a>
+    <section class="frame atlas-hero">
+      <div class="hero-content">
+        <p class="eyebrow">World of Warcraft: Forever</p>
+        <h1>Warfare <span>Field Atlas</span></h1>
+        <p class="intro-description">Look up your character’s progress and find guildmates for the next run.</p>
+        <div class="actions">
+          <a class="button primary" href="/group-up" data-nav>Find guildmates</a>
+          <a class="button" href="/roster" data-nav>Browse roster</a>
+        </div>
       </div>
-    </div></section>
-    <div class="summary"><div class="frame summary-inner">
-      ${metric("users", state.members.length, "Guild characters")}
-      ${metric("shield", guildClassCount, "Classes represented")}
-      ${metric("pulse", reportError ? "—" : reports.length, "Recent sim reports")}
-      ${metric("flag", state.ruleset || "Horde", state.ruleset ? "Guild ruleset" : "Guild faction")}
-    </div></div>
+      <div class="atlas-map" aria-hidden="true"></div>
+    </section>
     <div class="frame content dashboard">
       ${sourceNote()}
-      ${panel("Guild roster", "Browse characters and equipped builds", rosterRows(state.members.slice(0, 4)), '<a href="/roster" data-nav class="link">Full roster</a>')}
-      ${panel("Recent DPS sims", "Latest report per character", reportError ? notice(reportError) : simRows(latest), '<a href="/simulations" data-nav class="link">Sim history</a>')}
+      ${panel("Guild roster", guildSize, rosterRows(state.members.slice(0, 4)), '<a href="/roster" data-nav class="link">Full roster</a>')}
+      ${panel("Guild planning", "", [
+        atlasEntry("swords", "Shared quests &amp; dungeons", "See who needs the same run.", "Group Up", "/group-up"),
+        atlasEntry("users", "Character progress", "Active quests, dungeon clears, and attunements.", "Choose a character", "/roster"),
+        atlasEntry("pulse", "MythicSim reports", "Quick Sim results shared by your guildmates.", "View simulations", "/simulations")
+      ].join(""))}
+      ${reportError || latest.length ? `<div class="dashboard-wide">${panel("Recent DPS sims", "Latest report per character", reportError ? notice(reportError) : simRows(latest), '<a href="/simulations" data-nav class="link">Sim history</a>')}</div>` : ""}
     </div>`;
 }
 
@@ -196,7 +206,7 @@ function characterPage(character, { reports, reportError }) {
   const talents = character.talents.length ? character.talents.map(tree => `<div class="tree-heading">${esc(tree.name)}${Number.isFinite(tree.points) ? ` · ${tree.points} points` : ""}</div>` +
     detailList(tree.talents, talent => detailRow(talent.name, "", talent.rank ? `Rank ${talent.rank}` : ""), "No ranked talents reported.")).join("") : empty("Talent details are unavailable.");
   const professions = detailList(character.professions, profession => detailRow(profession.name, [profession.group, profession.tier].filter(Boolean).join(" · "), Number.isFinite(profession.current) ? `${profession.current}${profession.max ? ` / ${profession.max}` : ""}` : ""), "Profession details are unavailable.");
-  return intro(character.name, label, { back: true, eyebrow: "Warfare armory", action: armory ? `<a class="button" href="${armory}" target="_blank" rel="noopener">Blizzard Armory</a>` : "" }) + `
+  return intro(character.name, label, { back: true, mark: characterMark(character), action: armory ? `<a class="button" href="${armory}" target="_blank" rel="noopener">Blizzard Armory</a>` : "" }) + `
     <div class="frame content">
       ${sourceNote()}
       ${profileTabs(character, false)}
@@ -217,7 +227,7 @@ function simulations({ reports, reportError }) {
   const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish MythicSim result</button>' : "";
   const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener">Open MythicSim</a>';
   const options = state.members.map(character => `<option value="${esc(character.slug)}">${esc(character.name)}</option>`).join("");
-  return intro("DPS simulations", "Use MythicSim Quick Sim for equipped DPS or Best Gear to compare items. Share completed Quick Sim results with Warfare.", { action: openSimulator + importButton }) + `
+  return intro("DPS simulations", "Simulate your equipped build with Quick Sim or compare items with Best Gear. Share your Quick Sim results with the guild.", { action: importButton + openSimulator }) + `
     <div class="frame content">
       ${sourceNote()}
       ${reportError ? notice(reportError) : ""}
@@ -231,7 +241,6 @@ function simulations({ reports, reportError }) {
         <label>MythicSim result URL <input type="url" name="url" placeholder="https://mythicsim.com/sims/…" maxlength="240" required></label>
         <label>Simulated DPS <input type="number" name="dps" inputmode="decimal" min="0.01" max="1000000000" step="any" placeholder="DPS shown on the result" required></label>
         <label>Encounter settings (optional) <input name="scenario" maxlength="100" placeholder="e.g. Single target, 2 minutes"></label>
-        <label>Guild publishing key <input type="password" name="token" autocomplete="off" maxlength="256" required></label>
         <p class="form-status" role="status"></p>
         <div class="actions"><button class="button primary" type="submit">Publish report</button><button class="button" type="button" data-report-close>Cancel</button></div>
       </form></dialog>` : ""}
@@ -241,7 +250,7 @@ function simulations({ reports, reportError }) {
 async function submitReport(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const { character, token, url, dps, scenario } = Object.fromEntries(new FormData(form));
+  const { character, url, dps, scenario } = Object.fromEntries(new FormData(form));
   const button = form.querySelector('[type="submit"]');
   const feedback = form.querySelector(".form-status");
   button.disabled = true;
@@ -249,7 +258,7 @@ async function submitReport(event) {
   try {
     const response = await fetch("/api/reports", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ character, url, dps: Number(dps), scenario })
     });
     const result = await response.json();

@@ -1,5 +1,5 @@
 import { armoryConfigured, getGuildMember, getCharacterProgress, getQuestMatches } from "./armory.js";
-import { database, databaseConfigured, guildWritesEnabled, validEditor } from "./database.js";
+import { database, databaseConfigured } from "./database.js";
 import { HttpError, readJson } from "./http.js";
 import { dungeonById, unlockStepIds } from "../public/progress-catalog.js";
 import { getLoggedKills, logsConfigured, reportLink } from "./warcraft-logs.js";
@@ -39,7 +39,7 @@ async function rows(table, query) {
 export async function getPlanning(request) {
   const params = new URL(request.url).searchParams;
   const view = params.get("view");
-  const writable = guildWritesEnabled() && armoryConfigured();
+  const writable = databaseConfigured() && armoryConfigured();
   if (view === "quests") {
     return armoryConfigured() ? getQuestMatches() : { checked: 0, matches: [] };
   }
@@ -74,8 +74,7 @@ async function saveEntry(character, kind, key, data, remove = false) {
 }
 
 export async function updatePlanning(request) {
-  if (!guildWritesEnabled() || !armoryConfigured()) throw new HttpError(503, "Guild publishing is unavailable.");
-  if (!validEditor(request)) throw new HttpError(401, "The guild publishing key is invalid.");
+  if (!databaseConfigured() || !armoryConfigured()) throw new HttpError(503, "Guild publishing is unavailable.");
   const input = await readJson(request, 8192).catch(() => null);
   if (!input || typeof input.character !== "string") throw invalid("Choose a guild character.");
   const character = await getGuildMember(input.character);

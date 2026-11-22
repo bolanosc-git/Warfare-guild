@@ -23,10 +23,11 @@ export function panel(title, description, body, action = "") {
 }
 
 export function intro(title, subtitle, options = {}) {
-  return `<section class="page-intro"><div class="frame">
+  return `<section class="frame page-intro"><div class="intro-copy">
     ${options.back ? '<a class="back" href="/roster" data-nav>Back to roster</a>' : ""}
-    <p class="eyebrow">${esc(options.eyebrow ?? "Warfare · Horde")}</p>
-    <h1>${esc(title)}</h1><p>${esc(subtitle)}</p>
+    ${options.eyebrow ? `<p class="eyebrow">${esc(options.eyebrow)}</p>` : ""}
+    <div class="intro-title">${options.mark ?? ""}<h1>${esc(title)}</h1></div>
+    <p class="intro-description">${esc(subtitle)}</p>
     ${options.action ? `<div class="actions">${options.action}</div>` : ""}
     </div></section>`;
 }

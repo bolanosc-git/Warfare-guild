@@ -9,7 +9,7 @@ import * as reports from "../api/reports.js";
 import * as planning from "../api/planning.js";
 
 const routes = { "/api/guild": guild, "/api/character": character, "/api/reports": reports, "/api/planning": planning };
-const mime = { ".js": "text/javascript", ".html": "text/html", ".css": "text/css", ".svg": "image/svg+xml", ".webp": "image/webp" };
+const mime = { ".js": "text/javascript", ".html": "text/html", ".css": "text/css", ".svg": "image/svg+xml", ".webp": "image/webp", ".woff2": "font/woff2" };
 const root = resolve(import.meta.dirname, "../public");
 const port = Number(process.env.PORT || 3000);
 

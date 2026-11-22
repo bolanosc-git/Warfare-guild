@@ -26,8 +26,8 @@ export function profileTabs(character, progress) {
   return `<nav class="profile-tabs" aria-label="Character sections"><a class="button" href="${url}" data-nav ${!progress ? 'aria-current="page"' : ""}>Gear &amp; build</a><a class="button" href="${url}/progress" data-nav ${progress ? 'aria-current="page"' : ""}>Progress</a></nav>`;
 }
 
-function listRow(title, detail, control = "") {
-  return `<div class="detail-row line"><div class="planner-row-title"><strong>${title}</strong>${detail ? `<small>${detail}</small>` : ""}</div>${control}</div>`;
+function listRow(title, detail, control = "", badge = "") {
+  return `<div class="detail-row line"><div class="planner-row-title"><div class="planner-row-heading"><strong>${title}</strong>${badge}</div>${detail ? `<small>${detail}</small>` : ""}</div>${control}</div>`;
 }
 
 function questList(quests, member, writable, namesRequested) {
@@ -48,9 +48,10 @@ function availableQuests(progress, member, writable, entries) {
     : empty("The Armory has no active quest snapshot available.");
   const done = completed?.available
     ? `<div class="planner-filter"><label for="completed-query">Find a completed quest</label><input type="search" id="completed-query" data-completed-query placeholder="Search by name or ID"><p class="subtle" data-completed-count></p></div>
-        <div data-completed-results>${empty("Loading quest history…")}</div>`
+        <div class="quest-results" data-completed-results role="region" aria-label="Completed quest results" tabindex="0">${empty("Loading quest history…")}</div>
+        <div data-completed-more></div>`
     : empty("The Armory has no completed quest history available.");
-  return section("Active quests", synced, list) + section("Completed quests", completed?.available ? `${completed.quests.length} quests returned by the Armory` : "", done);
+  return `<div class="quest-grid">${section("Active quests", synced, list)}${section("Completed quests", completed?.available ? `${completed.quests.length} recorded by the Armory` : "", done)}</div>`;
 }
 
 function dungeonChecklist(member, entries, progress, writable, canImport) {
@@ -65,13 +66,14 @@ function dungeonChecklist(member, entries, progress, writable, canImport) {
     const current = [row.status, imported.status, observed].includes("cleared") ? "cleared" :
       [row.status, imported.status, observed].includes("partial") ? "partial" : "none";
     const log = validUrl(row.log || imported.log, reportHosts);
-    const tags = [dungeon.levels, dungeonStatus[current], row.note, imported.kills?.length ? `${imported.kills.length} logged boss kills` : "",
+    const tags = [`Levels ${dungeon.levels}`, row.note, imported.kills?.length ? `${imported.kills.length} logged boss kills` : "",
       row.status ? "Guild record" : observed ? "Blizzard Armory" : imported.status ? "Warcraft Logs" : ""].filter(Boolean);
     return listRow(esc(dungeon.name), tags.map(esc).join(" · ") + (log ? ` · <a class="link" href="${log}" target="_blank" rel="noopener">View log</a>` : ""),
       writable ? `<div class="row-actions">
         ${action("Edit", { action: "dungeon", character: member.slug, dungeon: dungeon.id, name: dungeon.name, progress: row.status ?? current, note: row.note ?? "", log: row.log ?? "", canImport })}
         ${action(needs.has(dungeon.id) ? "Remove request" : "Ask for group", { action: "need", character: member.slug, dungeon: dungeon.id, name: dungeon.name, remove: needs.has(dungeon.id) })}
-      </div>` : "");
+      </div>` : "",
+      `<span class="status-tag status-${current}">${dungeonStatus[current]}</span>`);
   }).join("");
   return section("Dungeon checklist", "A clear applies to the listed dungeon or wing. Guild entries can include a Warcraft Logs link.",
     `<div class="planner-scroll">${rows}</div>`);
@@ -120,7 +122,7 @@ export function planningPage(view, data, members, character, status) {
   }
   return {
     title: `${titles[view]}${view === "character" ? " Progress" : ""} | Warfare`,
-    result: intro(titles[view], subtitles[view], { back: view === "character" }) + `<div class="frame content planner-grid" data-planning>
+    result: intro(titles[view], subtitles[view], { back: view === "character" }) + `<div class="frame content planner-grid${view === "group" ? " group-grid" : ""}" data-planning>
       ${status ? `<p class="notice" role="status">${esc(status)}</p>` : ""}${body}
       <dialog aria-labelledby="planner-dialog-title" data-planner-dialog></dialog>
       </div>`,
@@ -150,8 +152,6 @@ function labels(payload) {
 
 }
 
-let publishingKey = "";
-
 function openPlanningDialog(dialog, payload, members, onSaved) {
   const view = labels(payload);
   const member = members.find(member => member.slug === payload.character);
@@ -162,7 +162,6 @@ function openPlanningDialog(dialog, payload, members, onSaved) {
     <h2 id="planner-dialog-title" class="section-title">${esc(view.title)}</h2>
     ${view.description ? `<p class="subtle">${esc(view.description)}</p>` : ""}
     ${memberField}${view.fields ?? ""}
-    <label>Guild publishing key <input name="token" type="password" maxlength="256" autocomplete="off" required></label>
     <p class="form-status" role="status"></p>
     <div class="actions"><button type="submit" class="button primary">${confirmLabel}</button>
       ${view.importButton ? '<button type="submit" class="button" value="import-log">Import logged kills</button>' : ""}
@@ -174,12 +173,11 @@ function openPlanningDialog(dialog, payload, members, onSaved) {
       element.value = payload[element.name];
     }
   }
-  form.elements.token.value = publishingKey;
   const dismiss = dialog.querySelector("[data-close-planning]");
   dismiss.addEventListener("click", () => dialog.close());
   form.addEventListener("submit", async event => {
     event.preventDefault();
-    const { token, ...fields } = Object.fromEntries(new FormData(form));
+    const fields = Object.fromEntries(new FormData(form));
     const data = { ...payload, ...fields };
     if (payload.manageable) data.remove = true;
     if (event.submitter?.value === "import-log") data.action = "import-log";
@@ -189,12 +187,10 @@ function openPlanningDialog(dialog, payload, members, onSaved) {
     feedback.textContent = "Saving…";
     try {
       const res = await fetch("/api/planning", { method: "POST", headers: {
-        "Content-Type": "application/json", Authorization: `Bearer ${token}`
+        "Content-Type": "application/json"
       }, body: JSON.stringify(data) });
       const result = await res.json();
-      if (res.status === 401) publishingKey = "";
       if (!res.ok) throw Error(result.error ?? "This update could not be saved.");
-      publishingKey = token;
       dialog.close();
       onSaved(result.message || "Saved.");
     } catch (error) {
@@ -216,6 +212,7 @@ export function bindPlanning(main, members, get, onSaved, completed) {
   const completedQuery = root.querySelector("[data-completed-query]");
   if (completedQuery) {
     const target = root.querySelector("[data-completed-results]");
+    const more = root.querySelector("[data-completed-more]");
     const count = root.querySelector("[data-completed-count]");
     let limit = 40;
     const update = () => {
@@ -224,10 +221,15 @@ export function bindPlanning(main, members, get, onSaved, completed) {
       const visible = result.slice(0, limit);
       count.textContent = `Showing ${visible.length} of ${result.length}`;
       target.innerHTML = visible.length ? questList(visible, null, false, new Set()) : empty("No matching quests.");
-      if (result.length > limit) target.insertAdjacentHTML("beforeend", '<p class="panel-note"><button type="button" class="button quiet" data-more-completed>Show more</button></p>');
+      more.innerHTML = result.length > limit ? '<p class="panel-note"><button type="button" class="button quiet" data-more-completed>Show more</button></p>' : "";
     };
-    completedQuery.addEventListener("input", () => { limit = 40; update(); });
-    target.addEventListener("click", event => { if (event.target.closest("[data-more-completed]")) { limit += 40; update(); } });
+    completedQuery.addEventListener("input", () => { limit = 40; update(); target.scrollTop = 0; });
+    more.addEventListener("click", event => {
+      if (!event.target.closest("[data-more-completed]")) return;
+      limit += 40;
+      update();
+      (more.querySelector("button") ?? target).focus();
+    });
     update();
   }
   root.querySelector("[data-find-matches]")?.addEventListener("click", async event => {
