@@ -227,6 +227,7 @@ function localTimeValue(instant) {
 
 function openPlanningDialog(dialog, payload, members, onSaved) {
   const view = labels(payload);
+  const requestId = payload.action === "event" && !payload.eventId ? crypto.randomUUID() : undefined;
   const member = members.find(member => member.slug === payload.character);
   const memberField = member ? `<p class="subtle">Character · ${esc(member.name)}</p>` :
     `<label>Character <select name="character" required><option value="">Choose a character</option>${membershipOptions(members, payload.manageable)}</select></label>`;
@@ -260,7 +261,7 @@ function openPlanningDialog(dialog, payload, members, onSaved) {
   form.addEventListener("submit", async event => {
     event.preventDefault();
     const { token, ...fields } = Object.fromEntries(new FormData(form));
-    const data = { ...payload, ...fields };
+    const data = { ...payload, ...fields, requestId };
     delete data.existing;
     if (payload.manageable) data.remove = true;
     if (event.submitter?.value === "import-log") data.action = "import-log";

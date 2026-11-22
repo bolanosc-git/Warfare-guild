@@ -30,6 +30,7 @@ test("guild planning exposes synchronized quests and validates writes", async t 
   } });
   const actor = (id, name, surname) => ({ character: { id, name, surname, level: 33, playable_class: { id: 7 } }, rank: id });
   const saved = [];
+  const savedEvents = new Map();
   const eventId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
   t.mock.method(globalThis, "fetch", async (target, _options = {}) => {
     const url = new URL(target);
@@ -44,8 +45,17 @@ test("guild planning exposes synchronized quests and validates writes", async t 
     }
     if (url.hostname === "fixture.supabase.co") {
       const resource = url.pathname.split("/").at(-1);
-      if (opts.method === "POST") saved.push([resource, JSON.parse(opts.body)]);
-      if (resource === "guild_events" && opts.method !== "POST") return Response.json([{ starts_at: new Date(Date.now()+60_000).toISOString() }]);
+      if (opts.method === "POST") {
+        const body = JSON.parse(opts.body);
+        if (resource === "guild_events" && body.id && savedEvents.has(body.id)) return Response.json([]);
+        saved.push([resource, body]);
+        if (resource === "guild_events" && body.id) savedEvents.set(body.id, body);
+        return Response.json([body]);
+      }
+      if (resource === "guild_events") {
+        const id = url.searchParams.get("id")?.slice(3);
+        return Response.json(savedEvents.has(id) ? [savedEvents.get(id)] : []);
+      }
       return Response.json([]);
     }
     throw Error(`Unexpected fixture path: ${url.pathname}`);
@@ -67,7 +77,10 @@ test("guild planning exposes synchronized quests and validates writes", async t 
   assert.equal((await send({ action: "unlock", step: "dalaran-horde-1", done: true })).status, 200);
   assert.equal((await send({ action: "need", name: "Shared quest" })).status, 200);
   assert.equal((await send({ action: "wish", dungeon: "ragefire-chasm", item: "Gear" })).status, 200);
-  assert.equal((await send({ action: "event", title: "Run", startsAt: new Date(Date.now()+60_000).toISOString() })).status, 200);
+  const event = { action: "event", title: "Run", startsAt: new Date(Date.now() + 60_000).toISOString(), requestId: eventId };
+  assert.equal((await send(event)).status, 200);
+  assert.equal((await send(event)).status, 200);
+  assert.equal((await send({ ...event, title: "Different run" })).status, 409);
   assert.equal((await send({ action: "rsvp", eventId, role: "Healer", response: "Going" })).status, 200);
   assert.deepEqual(saved.map(([resource, row]) => row.kind ?? resource), ["dungeon", "unlock", "need", "wish", "guild_events", "guild_event_rsvps"]);
 });

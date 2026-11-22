@@ -142,7 +142,20 @@ export async function updatePlanning(request) {
       if (!changes.length) throw new HttpError(404, "Select the character who organized this event.");
       return { message: "Guild event updated." };
     }
-    await database(eventTable, {}, writeOptions({ character_id: character.id, title, details, dungeon_id: dungeonId, starts_at: startsAt.toISOString() }));
+    const event = { character_id: character.id, title, details, dungeon_id: dungeonId, starts_at: startsAt.toISOString() };
+    if (!input.requestId) {
+      await database(eventTable, {}, writeOptions(event));
+      return { message: "Guild event added." };
+    }
+    if (typeof input.requestId !== "string" || !uuid.test(input.requestId)) throw invalid("Use a valid event request.");
+    const inserted = await database(eventTable, { on_conflict: "id" },
+      writeOptions({ ...event, id: input.requestId }, "resolution=ignore-duplicates,return=representation"));
+    if (!inserted.length) {
+      const [stored] = await database(eventTable, { id: `eq.${input.requestId}`, limit: "1" });
+      if (!stored || stored.cancelled || stored.character_id !== event.character_id ||
+        stored.title !== title || stored.details !== details || stored.dungeon_id !== dungeonId ||
+        Date.parse(stored.starts_at) !== startsAt.getTime()) throw new HttpError(409, "This event request already belongs to another update. Reopen the form.");
+    }
     return { message: "Guild event added." };
   }
   if (input.action === "rsvp" || input.action === "cancel-event") {
