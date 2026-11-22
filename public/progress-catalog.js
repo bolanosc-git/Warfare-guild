@@ -44,5 +44,3 @@ export const unlocks = [
 
 export const dungeonById = new Map(dungeons.map(dungeon => [dungeon.id, dungeon]));
 export const unlockStepIds = new Set(unlocks.flatMap(unlock => unlock.steps.map(step => step.id)));
-export const roles = ["Tank", "Healer", "DPS"];
-export const rsvpStatuses = ["Going", "Maybe", "Declined"];

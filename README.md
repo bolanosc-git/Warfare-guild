@@ -36,7 +36,7 @@ Apply [the schema](supabase/schema.sql) to a dedicated Supabase project. Add the
 | `SUPABASE_SECRET_KEY` | A server-only Supabase secret key or legacy service-role key. |
 | `GUILD_REPORT_TOKEN` | A randomly generated key of at least 24 characters. Share it with the guild members who can publish reports. |
 
-Run a WoW Forever Quick Sim at [MythicSim](https://mythicsim.com/wow-forever). Once it completes, copy the result URL from the address bar. On Warfare’s **Simulations** page, select **Publish MythicSim result**, choose the character, and enter the result URL, the displayed DPS, encounter settings if available, and the guild publishing key. The site saves the submitted DPS and a link to the source, deduplicates reports by their MythicSim result ID, and displays the date a report was added. Guild members run their sims in MythicSim and enter each new result. Use the same encounter settings when comparing DPS.
+Run a WoW Forever Quick Sim at [MythicSim](https://mythicsim.com/wow-forever/sim). Once it completes, copy the result URL from the address bar. On Warfare’s **Simulations** page, select **Publish MythicSim result**, choose the character, and enter the result URL, the displayed DPS, encounter settings if available, and the guild publishing key. The site saves the submitted DPS and a link to the source, deduplicates reports by their MythicSim result ID, and displays the date a report was added. Guild members run their sims in MythicSim and enter each new result. Use the same encounter settings when comparing DPS.
 
 The overview shows the newest report per character from the 250 most recent reports. Character pages show that character’s history from the same window. Previously saved reports keep their original source links. MythicSim links may expire under its [retention policy](https://mythicsim.com/privacy).
 
@@ -44,9 +44,7 @@ The overview shows the newest report per character from the 250 most recent repo
 
 For new deployments, apply the simulation schema and the [guild planning migration](supabase/migrations/20261122000000_guild_planning.sql). The planning tables use the same server-only Supabase connection and guild publishing key. Anyone who can view the guild site can read its shared plans. The shared key lets a member make updates for any roster character.
 
-- **Character Progress** shows Blizzard’s active and completed quests with the latest available snapshot, a dungeon and wing checklist, Horde unlock steps, and that character’s wishlist. Dungeon status can come from an Armory record or a guild entry. Members can attach a Warcraft Logs link to a manual record.
+- **Character Progress** shows Blizzard’s active and completed quests with the latest available snapshot, a dungeon and wing checklist, and Horde unlock steps. Dungeon status can come from an Armory record or a guild entry. Members can attach a Warcraft Logs link to a manual record.
 - **Group Up** shows shared guild requests. **Find shared quests** looks for overlaps in members’ active Armory quest logs.
-- **Calendar** lets members create events and RSVP by character as Tank, Healer, or DPS. Times are displayed in the viewer’s time zone. Use the organizing character to update or cancel an event.
-- **Wishlists** groups named drops by dungeon. Members can remove entries once they get the item.
 
 To enable **Import logged kills**, add `WCL_CLIENT_ID` and `WCL_CLIENT_SECRET` from a [Warcraft Logs API client](https://www.warcraftlogs.com/api/docs) to Vercel and redeploy. Imports use public reports and require confirmed boss kills for the selected character and dungeon. A logged kill adds partial progress. Record a full clear in the checklist when the whole dungeon or wing was cleared.

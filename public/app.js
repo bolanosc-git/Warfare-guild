@@ -213,13 +213,11 @@ function characterPage(character, { reports, reportError }) {
     </div>`;
 }
 
-const planningRoutes = { "/group-up": "group", "/calendar": "calendar", "/wishlists": "wishlists" };
-
 function simulations({ reports, reportError }) {
   const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish MythicSim result</button>' : "";
-  const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever" target="_blank" rel="noopener">Open MythicSim</a>';
+  const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener">Open MythicSim</a>';
   const options = state.members.map(character => `<option value="${esc(character.slug)}">${esc(character.name)}</option>`).join("");
-  return intro("DPS simulations", "Run a WoW Forever Quick Sim on MythicSim and share the result with Warfare.", { action: openSimulator + importButton }) + `
+  return intro("DPS simulations", "Use MythicSim Quick Sim for equipped DPS or Best Gear to compare items. Share completed Quick Sim results with Warfare.", { action: openSimulator + importButton }) + `
     <div class="frame content">
       ${sourceNote()}
       ${reportError ? notice(reportError) : ""}
@@ -287,11 +285,11 @@ async function render(moveFocus = true) {
     } else if (path === "/simulations") {
       result = simulations(await loadReports());
       title = "DPS Simulations | Warfare";
-    } else if (planningRoutes[path] || /^\/character\/[^/]+\/progress$/.test(path)) {
-      const view = planningRoutes[path] ?? "character";
+    } else if (path === "/group-up" || /^\/character\/[^/]+\/progress$/.test(path)) {
+      const view = path === "/group-up" ? "group" : "character";
       const slug = view === "character" ? decodeURIComponent(path.split("/")[2]) : null;
       const character = slug ? state.members.find(member => member.slug === slug) : null;
-      const query = view === "character" ? `character&slug=${encodeURIComponent(slug)}` : view === "wishlists" ? "group" : view;
+      const query = view === "character" ? `character&slug=${encodeURIComponent(slug)}` : view;
       const data = slug && !character ? {} : await get(`/api/planning?view=${query}`) ?? {};
       ({ result, title, completed } = planningPage(view, data, state.members, character, status));
     } else if (path.startsWith("/character/")) {

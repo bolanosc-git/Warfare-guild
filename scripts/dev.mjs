@@ -27,7 +27,7 @@ createServer(async (input, output) => {
       if (response.body) return Readable.fromWeb(response.body).pipe(output);
       return output.end();
     }
-    const spa = /^\/(?:roster\/?|simulations\/?|group-up\/?|calendar\/?|wishlists\/?|character\/[^/]+(?:\/progress)?\/?|)$/.test(url.pathname);
+    const spa = /^\/(?:roster\/?|simulations\/?|group-up\/?|character\/[^/]+(?:\/progress)?\/?|)$/.test(url.pathname);
     const file = spa ? resolve(root, "index.html") : resolve(root, `.${decodeURIComponent(url.pathname)}`);
     const path = relative(root, file);
     if (isAbsolute(path) || path === ".." || path.startsWith("../") || !(await stat(file)).isFile()) return output.writeHead(404).end();

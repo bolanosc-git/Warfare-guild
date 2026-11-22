@@ -141,15 +141,6 @@ dialog .form-status{color:#f6a28d;font-size:14px;min-height:20px}
 .planner-details summary:before{content:"+";color:var(--accent);margin-right:5px}
 .planner-details[open] summary:before{content:"−"}
 .planner-details summary>span:first-of-type{margin-right:auto}
-.calendar-event{display:grid;grid-template-columns:minmax(116px,1fr) minmax(0,3fr);gap:18px;padding:16px 20px}
-.calendar-date{color:#ef9d87;font-weight:700}
-.calendar-date small{display:block;color:var(--muted)}
-.calendar-body h3{font:700 26px/1 var(--heading)}
-.calendar-notes{margin-top:6px;overflow-wrap:anywhere}
-.calendar-roles{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0;color:#e3c8b8;font-size:14px}
-.calendar-roles span{border:1px solid var(--border);background:#211a1f;padding:2px 7px}
-.calendar-body .row-actions{margin-top:7px}
-dialog textarea{font:inherit;color:var(--text);background:#191519;border:1px solid #4c3c43;padding:8px 12px;resize:vertical}
 @media(max-width:850px){.header-inner nav{gap:15px}}
 @media(max-width:710px){.header-inner nav{overflow-x:auto;gap:18px;scrollbar-width:thin}.header-inner nav a{white-space:nowrap}}
-@media(max-width:540px){.planner-grid .detail-row{flex-wrap:wrap}.calendar-event{grid-template-columns:1fr;gap:7px}.planner-grid .panel-heading{flex-wrap:wrap}}
+@media(max-width:540px){.planner-grid .detail-row{flex-wrap:wrap}.planner-grid .panel-heading{flex-wrap:wrap}}

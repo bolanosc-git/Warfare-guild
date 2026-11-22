@@ -1,11 +1,10 @@
-import { dungeons, dungeonById, unlocks, roles, rsvpStatuses } from "./progress-catalog.js";
-import { dateLabel, esc, intro, panel, validUrl } from "./ui.js";
+import { dungeons, unlocks } from "./progress-catalog.js";
+import { esc, intro, panel, validUrl } from "./ui.js";
 
 const timeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 const dungeonStatus = { none: "No clear recorded", partial: "Partial clear", cleared: "Cleared" };
 const reportHosts = ["warcraftlogs.com", "www.warcraftlogs.com", "forever.warcraftlogs.com", "classic.warcraftlogs.com"];
 const empty = message => `<p class="empty">${esc(message)}</p>`;
-const options = values => values.map(value => `<option>${esc(value)}</option>`).join("");
 const dungeonOptions = dungeons.map(({ id, name, levels }) => `<option value="${id}">${esc(name)} · ${levels}</option>`).join("");
 const standIn = id => `<span class="subtle">${id ? "Former member" : "Unassigned"}</span>`;
 
@@ -107,71 +106,18 @@ function groupPage(data, members) {
       '<button type="button" class="button quiet" data-find-matches>Find shared quests</button>');
 }
 
-function wishlistPage(data, members, character = null) {
-  const byId = new Map(members.map(member => [member.id, member]));
-  const entries = (data.entries ?? []).filter(entry => entry.kind === "wish" && byId.has(entry.character_id) && (!character || entry.character_id === character.id));
-  const groups = new Map();
-  for (const entry of entries) {
-    const id = entry.data.dungeonId;
-    if (!groups.has(id)) groups.set(id, []);
-    groups.get(id).push(entry);
-  }
-  const lists = [...groups].sort((a, b) => b[1].length - a[1].length).map(([id, items]) =>
-    `<div data-dungeon-wishes="${esc(id)}"><h3 class="tree-heading">${esc(dungeonById.get(id)?.name ?? id)} · ${items.length} ${items.length === 1 ? "wish" : "wishes"}</h3>${items.map(entry => {
-      const member = byId.get(entry.character_id);
-      const { item, note } = entry.data;
-      return listRow(esc(item), `${memberLink(member, true)}${note ? ` · ${esc(note)}` : ""}`,
-        data.writable ? action("Remove", { action: "wish", character: member.slug, dungeon: id, item, remove: true }) : "");
-    }).join("")}</div>`).join("");
-  const filter = entries.length && !character ? `<div class="planner-filter"><label for="wishlist-dungeon">Filter by dungeon</label><select id="wishlist-dungeon" data-wishlist-filter><option value="">All dungeons</option>${dungeonOptions}</select><p class="subtle" data-wishlist-empty hidden>No wishlist items for this dungeon.</p></div>` : "";
-  return section(character ? "Gear wishlist" : "Wishlist by dungeon", "Pick runs that have upgrades for multiple guildmates.",
-    filter + (lists || empty("No items on this wishlist yet.")),
-    data.writable ? action("Add item", { action: "wish", character: character?.slug }, true) : "");
-}
-
-function calendarPage(data, members) {
-  const byId = new Map(members.map(member => [member.id, member]));
-  const events = data.events ?? [];
-  const renderEvent = event => {
-    const start = new Date(event.starts_at);
-    const future = start.getTime() > Date.now();
-    const owner = byId.get(event.character_id);
-    const responses = event.guild_event_rsvps ?? [];
-    const going = responses.filter(response => response.status === "Going");
-    const bucket = response => `${memberLink(byId.get(response.character_id))} · ${esc(response.role)}`;
-    const list = rsvpStatuses.map(status => {
-      const names = responses.filter(response => response.status === status).map(bucket);
-      return names.length ? `<p class="subtle"><strong>${status}</strong> · ${names.join(", ")}</p>` : "";
-    }).join("");
-    return `<article class="calendar-event line">
-      <div class="calendar-date"><time datetime="${esc(event.starts_at)}">${esc(timeFormat.format(start))}</time>${event.dungeon_id ? `<small>${esc(dungeonById.get(event.dungeon_id)?.name)}</small>` : ""}</div>
-      <div class="calendar-body"><h3>${esc(event.title)}</h3><p class="subtle">Organizer · ${memberLink(owner)}</p>
-      ${event.details ? `<p class="calendar-notes">${esc(event.details)}</p>` : ""}
-      <p class="calendar-roles">${roles.map(role => `<span>${going.filter(response => response.role === role).length} ${role}</span>`).join("")}</p>
-      ${list}<div class="row-actions">${data.writable && future ? action("RSVP", { action: "rsvp", eventId: event.id, name: event.title, existing: responses.map(response => ({
-        character: byId.get(response.character_id)?.slug, role: response.role, response: response.status
-      })) }) : ""}
-      ${data.writable && future && owner ? action("Edit event", { action: "event", eventId: event.id, character: owner.slug, title: event.title, details: event.details, dungeon: event.dungeon_id ?? "", startsAt: event.starts_at }) + action("Cancel event", { action: "cancel-event", eventId: event.id, character: owner.slug, name: event.title }) : ""}</div></div></article>`;
-  };
-  const upcoming = events.filter(event => Date.parse(event.starts_at) > Date.now());
-  const past = events.filter(event => Date.parse(event.starts_at) <= Date.now());
-  return section("Upcoming events", "Dates and times use your device’s time zone.", upcoming.map(renderEvent).join("") || empty("No upcoming events yet."),
-    data.writable ? action("Schedule event", { action: "event" }, true) : "") +
-    (past.length ? section("Recent events", "Past 30 days", past.reverse().map(renderEvent).join("")) : "");
-}
-
 export function planningPage(view, data, members, character, status) {
-  const titles = { group: "Group Up", calendar: "Guild calendar", wishlists: "Gear wishlists", character: character?.name ?? "Character unavailable" };
-  const subtitles = { group: "Find guildmates who need the same quests and dungeons.", calendar: "Plan guild runs and RSVP as tank, healer, or DPS.", wishlists: "See which dungeon drops guildmates are looking for.", character: character ? `Level ${character.level} · ${character.className}` : "This character is unavailable." };
+  const titles = { group: "Group Up", character: character?.name ?? "Character unavailable" };
+  const subtitles = { group: "Find guildmates who need the same quests and dungeons.", character: character ? `Level ${character.level} · ${character.className}` : "This character is unavailable." };
   const entries = data.entries ?? [];
   let body;
   if (view === "character") {
     body = character ? profileTabs(character, true) + availableQuests(data.progress, character, data.writable, entries) +
       dungeonChecklist(character, entries, data.progress, data.writable, data.logs) +
-      unlockChecklist(character, entries, data.progress, data.writable) + wishlistPage(data, members, character) : "";
-  } else if (view === "group") body = groupPage(data, members);
-  else if (view === "wishlists") body = wishlistPage(data, members);
-  else body = calendarPage(data, members);
+      unlockChecklist(character, entries, data.progress, data.writable) : "";
+  } else {
+    body = groupPage(data, members);
+  }
   return {
     title: `${titles[view]}${view === "character" ? " Progress" : ""} | Warfare`,
     result: intro(titles[view], subtitles[view], { back: view === "character" }) + `<div class="frame content planner-grid" data-planning>
@@ -196,42 +142,22 @@ function labels(payload) {
   };
   if (p.action === "unlock") return { title: p.done ? "Mark unlock step done" : "Reopen unlock step", description: p.name };
   if (p.action === "need") {
-    if (p.remove) return { title: "Remove group request", description: p.name };
-    if (p.manageable) return { title: "Remove group request", description: p.name };
+    if (p.remove || p.manageable) return { title: "Remove group request", description: p.name };
     if (p.name) return { title: "Request a group", description: p.name };
     return { title: "Request a group", fields: `<label>Dungeon <select name="dungeon"><option value="">Request a quest instead</option>${dungeonOptions}</select></label>
       <label>Quest name <input name="name" maxlength="85" placeholder="Fill in for a quest request"></label>` };
   }
-  if (p.action === "wish") return p.remove ? { title: "Remove wishlist item", description: p.item } :
-    { title: "Add a gear wish", fields: `<label>Dungeon <select name="dungeon" required><option value="">Choose a dungeon</option>${dungeonOptions}</select></label>
-      <label>Item name <input name="item" maxlength="75" required></label>
-      <label>Boss or loot note (optional) <input name="note" maxlength="150"></label>` };
-  if (p.action === "event") return { title: p.eventId ? "Edit guild event" : "Schedule a guild event", fields: `
-    <label>Event title <input name="title" maxlength="100" required></label>
-    <label>Date and time ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)} <input type="datetime-local" name="startsAt" required></label>
-    <label>Dungeon (optional) <select name="dungeon"><option value="">Choose a dungeon</option>${dungeonOptions}</select></label>
-    <label>Details (optional) <textarea name="details" maxlength="600" rows="3"></textarea></label>` };
-  if (p.action === "rsvp") return { title: "RSVP", description: p.name, fields: `
-    <label>Role <select name="role" required><option value="">Choose a role</option>${options(roles)}</select></label>
-    <label>Response <select name="response" required>${options(rsvpStatuses)}</select></label>` };
-  return { title: "Cancel guild event", description: p.name };
+
 }
 
 let publishingKey = "";
 
-function localTimeValue(instant) {
-  const date = new Date(instant);
-  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return shifted.toISOString().slice(0, 16);
-}
-
 function openPlanningDialog(dialog, payload, members, onSaved) {
   const view = labels(payload);
-  const requestId = payload.action === "event" && !payload.eventId ? crypto.randomUUID() : undefined;
   const member = members.find(member => member.slug === payload.character);
   const memberField = member ? `<p class="subtle">Character · ${esc(member.name)}</p>` :
     `<label>Character <select name="character" required><option value="">Choose a character</option>${membershipOptions(members, payload.manageable)}</select></label>`;
-  const confirmLabel = payload.action === "cancel-event" ? "Cancel event" : payload.remove || payload.manageable ? "Remove" : "Save";
+  const confirmLabel = payload.remove || payload.manageable ? "Remove" : "Save";
   dialog.innerHTML = `<form>
     <h2 id="planner-dialog-title" class="section-title">${esc(view.title)}</h2>
     ${view.description ? `<p class="subtle">${esc(view.description)}</p>` : ""}
@@ -245,27 +171,18 @@ function openPlanningDialog(dialog, payload, members, onSaved) {
   const form = dialog.querySelector("form");
   for (const element of form.elements) {
     if (element.name && typeof payload[element.name] === "string") {
-      element.value = element.name === "startsAt" ? localTimeValue(payload.startsAt) : payload[element.name];
+      element.value = payload[element.name];
     }
   }
   form.elements.token.value = publishingKey;
-  if (payload.action === "rsvp") {
-    form.elements.character.addEventListener("change", event => {
-      const previous = payload.existing.find(entry => entry.character === event.currentTarget.value);
-      form.elements.role.value = previous?.role ?? "";
-      form.elements.response.value = previous?.response ?? "Going";
-    });
-  }
   const dismiss = dialog.querySelector("[data-close-planning]");
   dismiss.addEventListener("click", () => dialog.close());
   form.addEventListener("submit", async event => {
     event.preventDefault();
     const { token, ...fields } = Object.fromEntries(new FormData(form));
-    const data = { ...payload, ...fields, requestId };
-    delete data.existing;
+    const data = { ...payload, ...fields };
     if (payload.manageable) data.remove = true;
     if (event.submitter?.value === "import-log") data.action = "import-log";
-    if (fields.startsAt) data.startsAt = new Date(fields.startsAt).toISOString();
     const feedback = form.querySelector(".form-status");
     const buttons = [...form.querySelectorAll('button[type="submit"]')];
     buttons.forEach(button => { button.disabled = true; });
@@ -313,15 +230,6 @@ export function bindPlanning(main, members, get, onSaved, completed) {
     target.addEventListener("click", event => { if (event.target.closest("[data-more-completed]")) { limit += 40; update(); } });
     update();
   }
-  root.querySelector("[data-wishlist-filter]")?.addEventListener("change", event => {
-    const id = event.target.value;
-    let visible = 0;
-    root.querySelectorAll("[data-dungeon-wishes]").forEach(element => {
-      element.hidden = Boolean(id && element.dataset.dungeonWishes !== id);
-      if (!element.hidden) visible++;
-    });
-    root.querySelector("[data-wishlist-empty]").hidden = visible !== 0;
-  });
   root.querySelector("[data-find-matches]")?.addEventListener("click", async event => {
     const button = event.currentTarget;
     const results = root.querySelector("[data-active-matches]");
