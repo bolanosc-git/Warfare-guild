@@ -1,5 +1,7 @@
 import { dungeons, unlocks } from "./progress-catalog.js";
 import { esc, intro, panel, validUrl } from "./ui.js";
+import { dungeonQuestById } from "./dungeon-quests.js";
+import { queueMutation } from "./offline.js";
 
 const timeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 const dungeonStatus = { none: "No clear recorded", partial: "Partial clear", cleared: "Cleared" };
@@ -108,24 +110,120 @@ function groupPage(data, members) {
       '<button type="button" class="button quiet" data-find-matches>Find shared quests</button>');
 }
 
+function wowheadQuest(quest) {
+  return `<a href="https://www.wowhead.com/forever/quest=${quest.id}" data-wowhead="quest=${quest.id}&amp;domain=forever" target="_blank" rel="noopener">${esc(quest.name)}</a>`;
+}
+
+function dungeonPriority(dungeon, data, activeQuests) {
+  const guide = dungeonQuestById.get(dungeon.id);
+  const [minLevel, maxLevel] = dungeon.levels.split(/[–-]/).map(Number);
+  const characters = data.characters ?? [];
+  const inRange = characters.filter(character => character.level >= minLevel && character.level <= maxLevel).length;
+  const highestLevel = Math.max(0, ...characters.map(character => character.level ?? 0));
+  const active = (guide?.quests ?? []).reduce((sum, quest) => sum + (activeQuests.get(quest.id)?.length ?? 0), 0);
+  const shared = (guide?.quests ?? []).filter(quest => (activeQuests.get(quest.id)?.length ?? 0) > 1).length;
+  return { dungeon, guide, active, shared, inRange, minLevel, levelDistance: Math.abs(highestLevel - maxLevel) };
+}
+
+export function buildDungeonPlan(data) {
+  const characters = data.characters ?? [];
+  const activeQuests = new Map();
+  const completedQuests = new Map();
+  for (const character of characters) {
+    for (const id of character.activeQuestIds ?? []) {
+      if (!activeQuests.has(id)) activeQuests.set(id, []);
+      activeQuests.get(id).push(character);
+    }
+    for (const id of character.completedQuestIds ?? []) {
+      if (!completedQuests.has(id)) completedQuests.set(id, new Set());
+      completedQuests.get(id).add(character.id);
+    }
+  }
+  const ranked = dungeons.map(dungeon => dungeonPriority(dungeon, data, activeQuests))
+    .sort((left, right) => right.shared - left.shared || right.active - left.active || right.inRange - left.inRange || left.levelDistance - right.levelDistance || left.minLevel - right.minLevel);
+  return ranked.map(row => ({
+    ...row,
+    quests: (row.guide?.quests ?? []).map(quest => ({
+      ...quest,
+      active: activeQuests.get(quest.id) ?? [],
+      completed: completedQuests.get(quest.id)?.size ?? 0,
+      checked: characters.filter(character => character.completedAvailable).length
+    }))
+  }));
+}
+
+function partySignups(signups, members) {
+  const memberById = new Map(members.map(member => [member.id, member]));
+  return signups.map(signup => ({ ...signup, member: memberById.get(signup.character_id) })).filter(signup => signup.member);
+}
+
+function questProgressLines(row) {
+  if (!row.quests.length) return row.guide
+    ? empty("This guide has no quest references in the current index.")
+    : '<p class="empty">No Wowhead Forever dungeon guide is indexed yet.</p>';
+  return row.quests.map(quest => {
+    const activeNames = quest.active.map(member => memberLink(member, true)).join(", ") || "None active in the latest snapshots";
+    const completion = quest.checked ? `${quest.completed} complete · ${quest.checked} logs checked` : "Quest history unavailable";
+    return `<div class="dungeon-quest line"><div><strong>${wowheadQuest(quest)}</strong><small>${activeNames}</small></div><span class="subtle">${completion}</span></div>`;
+  }).join("");
+}
+
+function dungeonCard(row, data, members) {
+  const signups = partySignups((data.signups ?? []).filter(signup => signup.dungeon_id === row.dungeon.id), members);
+  const signupsText = signups.map(signup => `${memberLink(signup.member, true)} · ${esc(signup.role)}${signup.note ? ` · ${esc(signup.note)}` : ""}`).join("<br>") || "No one signed up yet";
+  const activeLabel = row.active ? `${row.active} active guide quest ${row.active === 1 ? "need" : "needs"}` : "No active guide quests found";
+  const demand = row.shared ? `${row.shared} shared quests` : row.inRange ? `${row.inRange} characters in level range` : "";
+  const guideLink = row.guide ? `<a class="link" href="${esc(row.guide.guideUrl)}" target="_blank" rel="noopener">Wowhead guide</a>` : "";
+  const leaveButtons = signups.map(signup => data.writable
+    ? action(`Leave · ${signup.member.name}`, { action: "signup", dungeon: row.dungeon.id, character: signup.member.slug, remove: true }) : "").join("");
+  return `<section class="panel dungeon-plan-card" data-dungeon-card data-dungeon-name="${esc(row.dungeon.name.toLowerCase())}">
+    <div class="panel-heading"><div><h2>${esc(row.dungeon.name)}</h2><p>Levels ${esc(row.dungeon.levels)}${demand ? ` · ${esc(demand)}` : ""} · ${esc(activeLabel)}</p></div>
+      ${data.writable ? action("Join run", { action: "signup", dungeon: row.dungeon.id }, true) : ""}</div>
+    <div class="dungeon-card-content"><div class="dungeon-quest-list">${questProgressLines(row)}${guideLink ? `<p class="panel-note">${guideLink}</p>` : ""}</div>
+      <div class="dungeon-party"><strong>Run sign-ups</strong><p>${signupsText}</p>${leaveButtons}</div></div>
+  </section>`;
+}
+
+function dungeonPlanner(data, members) {
+  const plan = buildDungeonPlan(data);
+  const available = (data.characters ?? []).filter(character => character.activeAvailable || character.completedAvailable).length;
+  const recommended = plan.slice(0, 5);
+  const remaining = plan.slice(5);
+  const checked = data.checkedAt ? `Armory checked ${timeFormat.format(new Date(data.checkedAt))}` : "Armory quest data is unavailable";
+  const introText = available ? `${available} of ${(data.characters ?? []).length} characters have quest snapshots. Quest statuses reflect the latest Armory logs; use Wowhead for guide details.` : "Armory quest logs are unavailable. Dungeon guide links and run sign-ups are still available.";
+  return `<div class="dungeon-planner" data-planning>
+    <p class="notice" role="status">${esc(introText)}</p>
+    ${panel("Recommended next runs", checked, recommended.map(row => dungeonCard(row, data, members)).join("") || empty("No dungeons are indexed."))}
+    <section class="panel dungeon-index-panel"><div class="panel-heading"><div><h2>All Forever dungeons</h2><p>Search guides, quest progress, and run sign-ups.</p></div></div>
+      <div class="planner-filter"><label for="dungeon-search">Find a dungeon</label><input id="dungeon-search" type="search" placeholder="Search by dungeon name" data-dungeon-search autocomplete="off"></div>
+      <div class="dungeon-index" data-dungeon-index>${remaining.map(row => dungeonCard(row, data, members)).join("")}</div>
+      <p class="panel-note"><a href="https://www.wowhead.com/forever/guide/dungeons/every-dungeon-quest-location" target="_blank" rel="noopener">Full Wowhead Forever dungeon quest index</a> · Quest references are guide data, not a guarantee of faction or character eligibility.</p>
+    </section><dialog aria-labelledby="planner-dialog-title" data-planner-dialog></dialog>
+  </div>`;
+}
+
 export function planningPage(view, data, members, character, status) {
-  const titles = { group: "Group Up", character: character?.name ?? "Character unavailable" };
-  const subtitles = { group: "Find guildmates who need the same quests and dungeons.", character: character ? `Level ${character.level} · ${character.className}` : "This character is unavailable." };
+  const titles = { group: "Group Up", character: character?.name ?? "Character unavailable", planner: "Dungeon planner" };
+  const subtitles = { group: "Find guildmates who need the same quests and dungeons.", character: character ? `Level ${character.level} · ${character.className}` : "This character is unavailable.", planner: "Pick the next run from shared quest needs, level range, and who is ready to join." };
   const entries = data.entries ?? [];
   let body;
   if (view === "character") {
     body = character ? profileTabs(character, true) + availableQuests(data.progress, character, data.writable, entries) +
       dungeonChecklist(character, entries, data.progress, data.writable, data.logs) +
       unlockChecklist(character, entries, data.progress, data.writable) : "";
+  } else if (view === "planner") {
+    body = dungeonPlanner(data, members);
   } else {
     body = groupPage(data, members);
   }
   return {
     title: `${titles[view]}${view === "character" ? " Progress" : ""} | Warfare`,
-    result: intro(titles[view], subtitles[view], { back: view === "character" }) + `<div class="frame content planner-grid${view === "group" ? " group-grid" : ""}" data-planning>
-      ${status ? `<p class="notice" role="status">${esc(status)}</p>` : ""}${body}
-      <dialog aria-labelledby="planner-dialog-title" data-planner-dialog></dialog>
-      </div>`,
+    result: intro(titles[view], subtitles[view], { back: view === "character" }) + (view === "planner"
+      ? `<div class="frame content">${status ? `<p class="notice" role="status">${esc(status)}</p>` : ""}${body}</div>`
+      : `<div class="frame content planner-grid${view === "group" ? " group-grid" : ""}" data-planning>
+        ${status ? `<p class="notice" role="status">${esc(status)}</p>` : ""}${body}
+        <dialog aria-labelledby="planner-dialog-title" data-planner-dialog></dialog>
+        </div>`),
     completed: data.progress?.completed.quests ?? []
   };
 }
@@ -149,6 +247,11 @@ function labels(payload) {
     return { title: "Request a group", fields: `<label>Dungeon <select name="dungeon"><option value="">Request a quest instead</option>${dungeonOptions}</select></label>
       <label>Quest name <input name="name" maxlength="85" placeholder="Fill in for a quest request"></label>` };
   }
+  if (p.action === "signup") return {
+    title: p.remove ? "Leave dungeon run" : "Join dungeon run",
+    fields: p.remove ? "" : `<label>Role <select name="role"><option>Flexible</option><option>Tank</option><option>Healer</option><option>DPS</option></select></label>
+      <label>Note (optional) <input name="note" maxlength="140" placeholder="Availability, key, or short note"></label>`
+  };
 
 }
 
@@ -194,7 +297,17 @@ function openPlanningDialog(dialog, payload, members, onSaved) {
       dialog.close();
       onSaved(result.message || "Saved.");
     } catch (error) {
-      feedback.textContent = error.message;
+      if (error instanceof TypeError && data.action !== "import-log") {
+        try {
+          queueMutation(data);
+          dialog.close();
+          onSaved("Saved on this device. It will sync when Warfare is back online.");
+        } catch (queueError) {
+          feedback.textContent = queueError.message;
+        }
+      } else {
+        feedback.textContent = error.message;
+      }
     } finally {
       buttons.forEach(button => { button.disabled = false; });
     }
@@ -208,6 +321,12 @@ export function bindPlanning(main, members, get, onSaved, completed) {
   root.addEventListener("click", event => {
     const button = event.target.closest("[data-planning-action]");
     if (button) openPlanningDialog(dialog, JSON.parse(button.dataset.planningAction), members, onSaved);
+  });
+  root.querySelector("[data-dungeon-search]")?.addEventListener("input", event => {
+    const query = event.currentTarget.value.trim().toLowerCase();
+    root.querySelectorAll("[data-dungeon-card]").forEach(card => {
+      card.hidden = Boolean(query) && !card.dataset.dungeonName.includes(query);
+    });
   });
   const completedQuery = root.querySelector("[data-completed-query]");
   if (completedQuery) {
