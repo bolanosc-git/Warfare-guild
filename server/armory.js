@@ -114,6 +114,7 @@ export async function getGuildMember(slug) {
 
 export function normalizeGear(data) {
   return list(data?.equipped_items).map(item => ({
+    id: numeric(item.item?.id ?? item.id),
     slot: fallback(item.slot?.name, item.slot?.type?.replaceAll("_", " ") ?? "Equipment"),
     name: fallback(item.name, "Unknown item"),
     level: numeric(item.level?.value),
@@ -131,6 +132,7 @@ export function normalizeTalents(data) {
     points: numeric(tree.spent_points ?? tree.points_spent),
     talents: list(tree.talents ?? tree.selected_talents).map(talent => ({
       name: fallback(talent.talent?.name ?? talent.spell_tooltip?.spell?.name ?? talent.name, "Talent"),
+      spellId: numeric(talent.talent?.id ?? talent.spell_tooltip?.spell?.id ?? talent.id),
       rank: numeric(talent.talent_rank ?? talent.rank ?? talent.rank_used)
     }))
   }));
@@ -179,6 +181,7 @@ export async function getCharacter(slug) {
 }
 
 const activeQuestCache = new Map();
+const completedQuestCache = new Map();
 
 function questEntries(entries) {
   return list(entries).flatMap(entry => {
@@ -198,6 +201,47 @@ async function activeQuestLog(member) {
   })).catch(() => ({ available: false, quests: [], updatedAt: null }));
   activeQuestCache.set(member.id, { expires: Date.now() + 300_000, result });
   return result;
+}
+
+async function completedQuestLog(member) {
+  const previous = completedQuestCache.get(member.id);
+  if (previous?.expires > Date.now()) return previous.result;
+  const path = `/profile/wow/character/${encodeURIComponent(member.slug)}/quests/completed`;
+  const result = blizzard(path).then(({ data, updatedAt }) => ({
+    available: data !== null,
+    quests: questEntries(data?.quests),
+    updatedAt: updatedAt || null
+  })).catch(() => ({ available: false, quests: [], updatedAt: null }));
+  completedQuestCache.set(member.id, { expires: Date.now() + 300_000, result });
+  return result;
+}
+
+export async function getGuildQuestStatus() {
+  const { members } = await getGuild();
+  const characters = [];
+  for (let index = 0; index < members.length; index += 8) {
+    const batch = members.slice(index, index + 8);
+    const statuses = await Promise.all(batch.map(async member => {
+      if (member.level < 10) {
+        return { ...member, activeAvailable: false, completedAvailable: false, activeQuestIds: [], completedQuestIds: [], updatedAt: null };
+      }
+      const [active, completed] = await Promise.all([activeQuestLog(member), completedQuestLog(member)]);
+      return {
+        ...member,
+        activeAvailable: active.available,
+        completedAvailable: completed.available,
+        activeQuestIds: active.quests.map(quest => quest.id),
+        completedQuestIds: completed.quests.map(quest => quest.id),
+        updatedAt: active.updatedAt || completed.updatedAt || null
+      };
+    }));
+    characters.push(...statuses);
+  }
+  return {
+    checked: characters.filter(character => character.activeAvailable || character.completedAvailable).length,
+    characters,
+    checkedAt: new Date().toISOString()
+  };
 }
 
 const rejectUnreported = response => ({ data: response.status === "fulfilled" ? response.value.data : null });
