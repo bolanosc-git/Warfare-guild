@@ -1,10 +1,11 @@
-import { armoryConfigured, getGuildMember, getCharacterProgress, getQuestMatches } from "./armory.js";
+import { armoryConfigured, getGuildMember, getCharacterProgress, getGuildQuestStatus, getQuestMatches } from "./armory.js";
 import { database, databaseConfigured } from "./database.js";
 import { HttpError, readJson } from "./http.js";
 import { dungeonById, unlockStepIds } from "../public/progress-catalog.js";
 import { getLoggedKills, logsConfigured, reportLink } from "./warcraft-logs.js";
 
 const progressTable = "guild_progress";
+const signupsTable = "guild_dungeon_signups";
 const progressFields = "character_id,kind,entry_key,data,updated_at";
 const invalid = message => new HttpError(422, message);
 
@@ -43,6 +44,14 @@ export async function getPlanning(request) {
   if (view === "quests") {
     return armoryConfigured() ? getQuestMatches() : { checked: 0, matches: [] };
   }
+  if (view === "planner") {
+    const [questStatus, entries, signups] = await Promise.all([
+      armoryConfigured() ? getGuildQuestStatus() : Promise.resolve({ checked: 0, characters: [], checkedAt: new Date().toISOString() }),
+      databaseConfigured() ? rows(progressTable, { select: progressFields, kind: "in.(dungeon,dungeon-log,need)", order: "kind,character_id,entry_key" }) : [],
+      databaseConfigured() ? rows(signupsTable, { select: "dungeon_id,character_id,role,note,updated_at", order: "dungeon_id,role,character_id" }) : []
+    ]);
+    return { ...questStatus, entries, signups, writable: databaseConfigured() && armoryConfigured() };
+  }
   if (view === "character") {
     if (!armoryConfigured()) return { progress: null, entries: [], writable: false, logs: false };
     const member = await getGuildMember(params.get("slug"));
@@ -70,6 +79,20 @@ async function saveEntry(character, kind, key, data, remove = false) {
     method: "POST",
     headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
     body: JSON.stringify({ character_id: character.id, kind, entry_key: key, data, updated_at: new Date().toISOString() })
+  });
+}
+
+async function saveSignup(character, dungeonId, role, note, remove = false) {
+  if (remove) {
+    await database(signupsTable, { character_id: `eq.${character.id}`, dungeon_id: `eq.${dungeonId}` }, {
+      method: "DELETE", headers: { Prefer: "return=representation" }
+    });
+    return;
+  }
+  await database(signupsTable, { on_conflict: "dungeon_id,character_id" }, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify({ dungeon_id: dungeonId, character_id: character.id, role, note, updated_at: new Date().toISOString() })
   });
 }
 
@@ -103,6 +126,17 @@ export async function updatePlanning(request) {
     const key = dungeonId ? `dungeon:${dungeonId}` : `quest:${normalizedKey(name)}`;
     await saveEntry(character, "need", key, { name, dungeonId }, input.remove === true);
     return { message: input.remove ? "Group request removed." : "Group request shared." };
+  }
+  if (input.action === "signup") {
+    const dungeonId = dungeon(input.dungeon);
+    if (input.remove === true) {
+      await saveSignup(character, dungeonId, "Flexible", "", true);
+      return { message: "Run sign-up removed." };
+    }
+    if (!["Tank", "Healer", "DPS", "Flexible"].includes(input.role)) throw invalid("Choose a valid party role.");
+    const note = field(input.note, 140, "run note");
+    await saveSignup(character, dungeonId, input.role, note);
+    return { message: "Run sign-up saved." };
   }
   throw invalid("Choose a valid guild update.");
 }

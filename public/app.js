@@ -1,6 +1,8 @@
 import { esc, validUrl, dateLabel, intro, panel } from "./ui.js";
 import { bindPlanning, planningPage, profileTabs } from "./planning.js";
 import { demoCharacter, demoMembers, demoReports } from "./demo.js";
+import { tierPrepPage, simCoverage } from "./tier-prep.js";
+import { flushQueuedMutations, queuedMutationCount } from "./offline.js";
 
 const icons = {
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/>',
@@ -150,8 +152,10 @@ function overview({ reports, reportError }) {
       ${panel("Guild roster", guildSize, rosterRows(state.members.slice(0, 4)), '<a href="/roster" data-nav class="link">Full roster</a>')}
       ${panel("Guild planning", "", [
         atlasEntry("swords", "Shared quests &amp; dungeons", "See who needs the same run.", "Group Up", "/group-up"),
+        atlasEntry("crosshair", "Dungeon planner", "Rank runs by shared quests and sign up by role.", "Plan a run", "/dungeon-planner"),
         atlasEntry("users", "Character progress", "Active quests, dungeon clears, and attunements.", "Choose a character", "/roster"),
-        atlasEntry("pulse", "MythicSim reports", "Quick Sim results shared by your guildmates.", "View simulations", "/simulations")
+        atlasEntry("pulse", "MythicSim reports", "Quick Sim results and sim coverage.", "View simulations", "/simulations"),
+        atlasEntry("shield", "Tier 1 readiness", "Track level and sim coverage before the next tier.", "View prep", "/tier-prep")
       ].join(""))}
       ${reportError || latest.length ? `<div class="dashboard-wide">${panel("Recent DPS sims", "Latest report per character", reportError ? notice(reportError) : simRows(latest), '<a href="/simulations" data-nav class="link">Sim history</a>')}</div>` : ""}
     </div>`;
@@ -190,6 +194,14 @@ function detailRow(name, subtitle, value) {
     ${subtitle ? `<small>${esc(subtitle)}</small>` : ""}</span></span><span class="level">${esc(value)}</span></li>`;
 }
 
+function wowheadLink(kind, id, name) {
+  return `<a href="https://www.wowhead.com/forever/${kind}=${id}" data-wowhead="${kind}=${id}&amp;domain=forever" target="_blank" rel="noopener">${esc(name)}</a>`;
+}
+
+function detailMarkupRow(name, subtitle, value) {
+  return `<li class="detail-row line"><span class="gear-name"><span><strong>${name}</strong>${subtitle ? `<small>${esc(subtitle)}</small>` : ""}</span></span><span class="level">${esc(value)}</span></li>`;
+}
+
 function detailList(items, mapper, message) {
   return items.length ? `<ul class="profile-list">${items.map(mapper).join("")}</ul>` : empty(message);
 }
@@ -199,11 +211,11 @@ function characterPage(character, { reports, reportError }) {
   const armory = validUrl(character.armoryUrl, ["worldofwarcraft.blizzard.com"]);
   const label = [character.level && `Level ${character.level}`, character.race, character.className].filter(Boolean).join(" · ");
   const history = reports.filter(report => report.characterId === character.id);
-  const gear = detailList(character.gear, item => detailRow(item.name,
+  const gear = detailList(character.gear, item => detailMarkupRow(item.id ? wowheadLink("item", item.id, item.name) : esc(item.name),
     [item.slot, item.qualityLabel, item.enchant].filter(Boolean).join(" · "), item.level ? `iLvl ${item.level}` : ""),
     "Equipment details are unavailable.");
   const talents = character.talents.length ? character.talents.map(tree => `<div class="tree-heading">${esc(tree.name)}${Number.isFinite(tree.points) ? ` · ${tree.points} points` : ""}</div>` +
-    detailList(tree.talents, talent => detailRow(talent.name, "", talent.rank ? `Rank ${talent.rank}` : ""), "No ranked talents reported.")).join("") : empty("Talent details are unavailable.");
+    detailList(tree.talents, talent => detailMarkupRow(talent.spellId ? wowheadLink("spell", talent.spellId, talent.name) : esc(talent.name), "", talent.rank ? `Rank ${talent.rank}` : ""), "No ranked talents reported.")).join("") : empty("Talent details are unavailable.");
   const professions = detailList(character.professions, profession => detailRow(profession.name, [profession.group, profession.tier].filter(Boolean).join(" · "), Number.isFinite(profession.current) ? `${profession.current}${profession.max ? ` / ${profession.max}` : ""}` : ""), "Profession details are unavailable.");
   return intro(character.name, label, { back: true, mark: characterMark(character), action: armory ? `<a class="button" href="${armory}" target="_blank" rel="noopener">Blizzard Armory</a>` : "" }) + `
     <div class="frame content">
@@ -226,13 +238,17 @@ function simulations({ reports, reportError }) {
   const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish MythicSim result</button>' : "";
   const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener">Open MythicSim</a>';
   const options = state.members.map(character => `<option value="${esc(character.slug)}">${esc(character.name)}</option>`).join("");
+  const coverage = simCoverage(state.members, reports);
+  const unsimmed = coverage.entries.filter(entry => !entry.current);
+  const coverageRows = unsimmed.length ? unsimmed.slice(0, 8).map(({ member, report, date }) => `<div class="detail-row line"><span><a href="/character/${encodeURIComponent(member.slug)}" data-nav><strong>${esc(member.name)}</strong></a><small>${report && date ? `Last sim ${dateLabel(date)}` : "No published sim"}</small></span><a href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener" class="link">Run sim</a></div>`).join("") : '<p class="empty">All characters have a report from the last 30 days.</p>';
   return intro("DPS simulations", "Simulate your equipped build with Quick Sim or compare items with Best Gear. Share your Quick Sim results with the guild.", { action: importButton + openSimulator }) + `
     <div class="frame content">
       ${sourceNote()}
       ${reportError ? notice(reportError) : ""}
       ${status ? notice(status) : ""}
+      ${panel("Sim coverage", `${coverage.current} of ${coverage.total} characters have a result from the last 30 days.`, coverageRows, '<a href="/tier-prep" data-nav class="link">Tier prep</a>')}
       ${panel("Report history", "Newest first · Compare DPS using matching encounter settings", simRows(reports, true) +
-      '<p class="panel-note">Saved DPS summaries remain available if the original result link expires.</p>')}
+      '<p class="panel-note">Saved DPS summaries remain available if the original result link expires. MythicSim runs the sim; Warfare stores the submitted result.</p>')}
       ${importButton ? `<dialog aria-labelledby="import-title"><form data-report-form>
         <h2 id="import-title" class="section-title">Publish MythicSim result</h2>
         <p class="subtle">Run Quick Sim in MythicSim, then copy the result page URL from the address bar and enter its displayed DPS. The link and DPS are visible to site visitors.</p>
@@ -293,13 +309,18 @@ async function render(moveFocus = true) {
     } else if (path === "/simulations") {
       result = simulations(await loadReports());
       title = "DPS Simulations | Warfare";
-    } else if (path === "/group-up" || /^\/character\/[^/]+\/progress$/.test(path)) {
-      const view = path === "/group-up" ? "group" : "character";
+    } else if (path === "/group-up" || path === "/dungeon-planner" || /^\/character\/[^/]+\/progress$/.test(path)) {
+      const view = path === "/group-up" ? "group" : path === "/dungeon-planner" ? "planner" : "character";
       const slug = view === "character" ? decodeURIComponent(path.split("/")[2]) : null;
       const character = slug ? state.members.find(member => member.slug === slug) : null;
       const query = view === "character" ? `character&slug=${encodeURIComponent(slug)}` : view;
       const data = slug && !character ? {} : await get(`/api/planning?view=${query}`) ?? {};
       ({ result, title, completed } = planningPage(view, data, state.members, character, status));
+    } else if (path === "/tier-prep") {
+      const { reports, reportError } = await loadReports();
+      result = tierPrepPage(state.members, reports);
+      if (reportError) result = result.replace('<div class="frame content tier-grid">', `<div class="frame content tier-grid">${notice(reportError)}`);
+      title = "Tier 1 Readiness | Warfare";
     } else if (path.startsWith("/character/")) {
       const slug = decodeURIComponent(path.slice("/character/".length));
       const [character, reports] = await Promise.all([
@@ -318,6 +339,7 @@ async function render(moveFocus = true) {
     if (request !== renderRequest) return;
     document.title = `${title} · WoW Forever`;
     main.innerHTML = result;
+    requestAnimationFrame(() => globalThis.WH?.Tooltips?.refreshLinks?.(true));
     const filters = main.querySelector("[data-roster-filters]");
     if (filters) {
       filters.addEventListener("input", () => updateRoster(filters));
@@ -339,6 +361,28 @@ async function render(moveFocus = true) {
     main.querySelector("#reload").addEventListener("click", () => render());
   }
 }
+
+function offlineIndicator() {
+  const target = document.querySelector("#offline-status");
+  if (!target) return;
+  const queued = queuedMutationCount();
+  target.textContent = !navigator.onLine ? "Offline · cached field guide" : queued ? `Online · ${queued} update${queued === 1 ? "" : "s"} waiting` : "Online";
+  target.classList.toggle("is-offline", !navigator.onLine);
+  target.classList.toggle("has-pending", Boolean(queued));
+}
+
+window.addEventListener("online", () => { flushQueuedMutations(); offlineIndicator(); });
+window.addEventListener("offline", offlineIndicator);
+window.addEventListener("warfare-offline-queue", offlineIndicator);
+window.addEventListener("warfare-offline-synced", () => {
+  localStorage.setItem("warfare-last-sync", new Date().toISOString());
+  status = "Offline changes synced.";
+  offlineIndicator();
+  render(false);
+});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+offlineIndicator();
+flushQueuedMutations();
 
 document.addEventListener("click", event => {
   const link = event.target.closest("a[data-nav]");

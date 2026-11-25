@@ -6,6 +6,8 @@
     { "source": "/roster", "destination": "/index.html" },
     { "source": "/simulations", "destination": "/index.html" },
     { "source": "/group-up", "destination": "/index.html" },
+    { "source": "/dungeon-planner", "destination": "/index.html" },
+    { "source": "/tier-prep", "destination": "/index.html" },
     { "source": "/character/:slug", "destination": "/index.html" },
     { "source": "/character/:slug/progress", "destination": "/index.html" }
   ],

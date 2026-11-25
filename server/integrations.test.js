@@ -7,11 +7,13 @@ test("Forever profile normalization uses the active specialization group and tal
   const result = normalizeTalents({ specialization_groups: [
     { is_active: false, specializations: [{ specialization_name: "Arms", spent_points: 20 }] },
     { is_active: true, specializations: [
-      { specialization_name: "Fury", spent_points: 31, talents: [{ talent: { name: "Cruelty" }, talent_rank: 5 }] }
+      { specialization_name: "Fury", spent_points: 31, talents: [{ talent: { id: 166, name: "Cruelty" }, talent_rank: 5 }] }
     ] }
   ] });
-  assert.deepEqual(result, [{ name: "Fury", points: 31, talents: [{ name: "Cruelty", rank: 5 }] }]);
-  assert.equal(normalizeGear({ equipped_items: [{ name: "Axe", level: { value: 60 } }] })[0].level, 60);
+  assert.deepEqual(result, [{ name: "Fury", points: 31, talents: [{ name: "Cruelty", spellId: 166, rank: 5 }] }]);
+  const gear = normalizeGear({ equipped_items: [{ item: { id: 120 }, name: "Axe", level: { value: 60 } }] })[0];
+  assert.equal(gear.level, 60);
+  assert.equal(gear.id, 120);
   assert.equal(normalizeProfessions({ primaries: [{ profession: { name: "Mining" }, tiers: [{ skill_points: 284, max_skill_points: 300 }] }] })[0].current, 284);
 });
 
