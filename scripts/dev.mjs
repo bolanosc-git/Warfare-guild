@@ -9,7 +9,7 @@ import * as reports from "../api/reports.js";
 import * as planning from "../api/planning.js";
 
 const routes = { "/api/guild": guild, "/api/character": character, "/api/reports": reports, "/api/planning": planning };
-const mime = { ".js": "text/javascript", ".html": "text/html", ".css": "text/css", ".svg": "image/svg+xml", ".webp": "image/webp", ".woff2": "font/woff2" };
+const mime = { ".js": "text/javascript", ".html": "text/html", ".css": "text/css", ".svg": "image/svg+xml", ".webp": "image/webp", ".woff2": "font/woff2", ".webmanifest": "application/manifest+json" };
 const root = resolve(import.meta.dirname, "../public");
 const port = Number(process.env.PORT || 3000);
 
@@ -27,7 +27,7 @@ createServer(async (input, output) => {
       if (response.body) return Readable.fromWeb(response.body).pipe(output);
       return output.end();
     }
-    const spa = /^\/(?:roster\/?|simulations\/?|group-up\/?|character\/[^/]+(?:\/progress)?\/?|)$/.test(url.pathname);
+    const spa = /^\/(?:roster\/?|simulations\/?|group-up\/?|dungeon-planner\/?|tier-prep\/?|character\/[^/]+(?:\/progress)?\/?|)$/.test(url.pathname);
     const file = spa ? resolve(root, "index.html") : resolve(root, `.${decodeURIComponent(url.pathname)}`);
     const path = relative(root, file);
     if (isAbsolute(path) || path === ".." || path.startsWith("../") || !(await stat(file)).isFile()) return output.writeHead(404).end();
