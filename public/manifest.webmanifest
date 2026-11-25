@@ -1,0 +1,14 @@
+{
+  "id": "/",
+  "name": "Warfare Guild Field Guide",
+  "short_name": "Warfare",
+  "description": "Offline roster, dungeon planner, and progress guide for Warfare.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#121214",
+  "theme_color": "#17171a",
+  "icons": [
+    { "src": "/assets/mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
