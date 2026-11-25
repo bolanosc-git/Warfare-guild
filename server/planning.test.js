@@ -30,6 +30,7 @@ test("guild planning exposes synchronized quests and validates writes", async t 
   } });
   const actor = (id, name, surname) => ({ character: { id, name, surname, level: 33, playable_class: { id: 7 } }, rank: id });
   const saved = [];
+  const signupSaved = [];
   const reads = [];
   t.mock.method(globalThis, "fetch", async (target, _options = {}) => {
     const url = new URL(target);
@@ -43,13 +44,14 @@ test("guild planning exposes synchronized quests and validates writes", async t 
       if (url.pathname.endsWith("/encounters/dungeons")) return Response.json({});
     }
     if (url.hostname === "fixture.supabase.co") {
-      assert.equal(url.pathname, "/rest/v1/guild_progress");
+      assert.ok(["/rest/v1/guild_progress", "/rest/v1/guild_dungeon_signups"].includes(url.pathname));
       if (opts.method === "POST") {
         const body = JSON.parse(opts.body);
-        saved.push(body);
+        if (url.pathname.endsWith("guild_dungeon_signups")) signupSaved.push(body);
+        else saved.push(body);
         return Response.json([body]);
       }
-      reads.push(url.searchParams.get("kind"));
+      if (url.pathname.endsWith("guild_progress")) reads.push(url.searchParams.get("kind"));
       return Response.json([]);
     }
     throw Error(`Unexpected fixture path: ${url.pathname}`);
@@ -66,16 +68,24 @@ test("guild planning exposes synchronized quests and validates writes", async t 
   assert.equal(profile.progress.completed.quests[0].name, "Turned in");
   const group = await read("?view=quests");
   assert.deepEqual(group.matches[0].characters, [1, 2]);
+  const planner = await read("?view=planner");
+  assert.equal(planner.checked, 2);
+  assert.equal(planner.characters[0].activeQuestIds[0], 20);
+  assert.equal(planner.writable, true);
   assert.equal((await send({ character: "missing-member", action: "need", dungeon: "ragefire-chasm" })).status, 404);
   assert.equal((await send({ action: "dungeon", dungeon: "unknown", progress: "cleared" })).status, 422);
   assert.equal((await send({ action: "dungeon", dungeon: "ragefire-chasm", progress: "cleared" })).status, 200);
   assert.equal((await send({ action: "unlock", step: "dalaran-horde-1", done: true })).status, 200);
   assert.equal((await send({ action: "need", name: "Shared quest" })).status, 200);
+  assert.equal((await send({ action: "signup", dungeon: "ragefire-chasm", role: "Tank", note: "After 7" })).status, 200);
+  assert.equal((await send({ action: "signup", dungeon: "ragefire-chasm", role: "Invalid" })).status, 422);
+  assert.equal((await send({ action: "signup", dungeon: "ragefire-chasm", remove: true })).status, 200);
   assert.equal((await GET(new Request(endpoint + "?view=calendar"))).status, 400);
   await read("?view=group");
-  assert.deepEqual(reads, ["in.(dungeon,dungeon-log,unlock,need)", "eq.need"]);
+  assert.deepEqual(reads, ["in.(dungeon,dungeon-log,unlock,need)", "in.(dungeon,dungeon-log,need)", "eq.need"]);
   for (const action of ["wish", "event", "rsvp", "cancel-event"]) {
     assert.equal((await send({ action })).status, 422);
   }
   assert.deepEqual(saved.map(row => row.kind), ["dungeon", "unlock", "need"]);
+  assert.deepEqual(signupSaved.map(row => [row.role, row.note]), [["Tank", "After 7"]]);
 });
