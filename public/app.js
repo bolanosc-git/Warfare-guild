@@ -15,9 +15,9 @@ const icons = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>'
 };
 const classStyles = {
-  Warrior: ["#79502c", "swords"], Rogue: ["#735912", "swords"], Mage: ["#236580", "bolt"],
-  Shaman: ["#31528c", "bolt"], Hunter: ["#496225", "crosshair"], Warlock: ["#644681", "flame"],
-  Priest: ["#65594b", "plus"], Druid: ["#8d4522", "leaf"], Paladin: ["#8d4262", "shield"]
+  Warrior: ["#e5b287", "swords"], Rogue: ["#f3d579", "swords"], Mage: ["#88d9ed", "bolt"],
+  Shaman: ["#96b7fa", "bolt"], Hunter: ["#aacf90", "crosshair"], Warlock: ["#c7a9ef", "flame"],
+  Priest: ["#e5ded2", "plus"], Druid: ["#f6aa78", "leaf"], Paladin: ["#f4a7c5", "shield"]
 };
 const main = document.querySelector("#main");
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
@@ -74,7 +74,7 @@ function sourceNote() {
 }
 
 function classStyle(character) {
-  return classStyles[character.className] ?? ["#705548", "shield"];
+  return classStyles[character.className] ?? ["#cfad9d", "shield"];
 }
 
 function characterMark(character) {
@@ -134,17 +134,16 @@ function overview({ reports, reportError }) {
   const latest = latestReports(reports).slice(0, 4);
   const guildSize = `${state.members.length} ${state.members.length === 1 ? "character" : "characters"} · ${guildClassCount} ${guildClassCount === 1 ? "class" : "classes"}`;
   return `
-    <section class="frame atlas-hero">
+    <section class="frame stronghold">
       <div class="hero-content">
         <p class="eyebrow">World of Warcraft: Forever</p>
-        <h1>Warfare <span>Field Atlas</span></h1>
-        <p class="intro-description">Look up your character’s progress and find guildmates for the next run.</p>
+        <h1>Warfare</h1>
+        <p class="intro-description">Find your next dungeon group, check your build, and follow the progress of Warfare’s Horde roster.</p>
         <div class="actions">
           <a class="button primary" href="/group-up" data-nav>Find guildmates</a>
           <a class="button" href="/roster" data-nav>Browse roster</a>
         </div>
       </div>
-      <div class="atlas-map" aria-hidden="true"></div>
     </section>
     <div class="frame content dashboard">
       ${sourceNote()}
