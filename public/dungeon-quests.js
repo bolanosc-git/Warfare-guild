@@ -21,6 +21,9 @@ const allianceOnlyQuestIds = new Set([
   96773, 96800, 97130, 97173, 98423, 98815, 98824
 ]);
 
+// Forever identifies these as Alliance-only dungeons with no Horde quests.
+const allianceOnlyDungeonIds = new Set(["deadmines", "stockade"]);
+
 const rawDungeonQuestCatalog = [
   {
     "dungeonId": "hall-of-thanes",
@@ -2504,10 +2507,12 @@ const rawDungeonQuestCatalog = [
   }
 ];
 
-export const dungeonQuestCatalog = rawDungeonQuestCatalog.map(dungeon => ({
-  ...dungeon,
-  quests: dungeon.quests.filter(quest => !allianceOnlyQuestIds.has(quest.id))
-}));
+export const dungeonQuestCatalog = rawDungeonQuestCatalog
+  .filter(dungeon => !allianceOnlyDungeonIds.has(dungeon.dungeonId))
+  .map(dungeon => ({
+    ...dungeon,
+    quests: dungeon.quests.filter(quest => !allianceOnlyQuestIds.has(quest.id))
+  }));
 
 export const dungeonQuestById = new Map(dungeonQuestCatalog.map(entry => [entry.dungeonId, entry]));
 export const questGuideUrl = "https://www.wowhead.com/forever/guide/dungeons/every-dungeon-quest-location";
