@@ -239,7 +239,7 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .dashboard { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); }
-.dashboard > .notice, .dashboard-wide { grid-column: 1 / -1; }
+.dashboard > .notice { grid-column: 1 / -1; }
 
 .panel {
   min-width: 0;
@@ -313,7 +313,27 @@ h1, h2, h3, p { margin: 0; }
 
 .roster-entry:hover { background: var(--paper-deep); }
 .roster-row > .level { text-align: left; }
-.roster-row .person { display: flex; min-width: 0; }
+.roster-row .sort-column {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 33px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+
+.sort-column:hover, [aria-sort] > .sort-column { color: var(--accent); }
+.sort-indicator::after { content: "↕"; font-size: .8rem; letter-spacing: 0; }
+[aria-sort="ascending"] .sort-indicator::after { content: "↑"; }
+[aria-sort="descending"] .sort-indicator::after { content: "↓"; }
+
+.person { display: flex; min-width: 0; }
 .roster-row .person:hover strong { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .roster-label .sim-cell, .roster-label .sim-action { color: var(--muted); }
 .roster-sim { display: block; min-width: 0; }
@@ -424,6 +444,9 @@ select {
 .compact-sort { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .8rem; font-weight: 700; }
 .compact-sort select { width: auto; min-width: 135px; min-height: 38px; padding-block: 5px; font-size: .8125rem; }
 .panel-heading .compact-sort { flex: none; }
+.page-toolbar .compact-sort select { width: 100%; min-width: 0; min-height: 44px; }
+.page-toolbar .compact-sort { align-items: stretch; font-size: .875rem; }
+.page-toolbar .compact-sort select { font-size: inherit; }
 
 .profile-tabs {
   display: flex;
@@ -461,7 +484,7 @@ select {
 .detail-row strong { overflow-wrap: anywhere; }
 .detail-row .level { flex: none; color: var(--accent); font-weight: 700; }
 .gear-name { min-width: 0; }
-.tree-heading { padding: 9px 19px; background: var(--paper-deep); color: var(--accent); font-size: .9375rem; font-weight: 700; }
+.tree-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px 19px; background: var(--paper-deep); color: var(--accent); font-size: .9375rem; font-weight: 700; }
 .tree-heading:not(:first-child) { border-top: 1px solid var(--rule-light); }
 
 .sim-row {
@@ -543,7 +566,7 @@ select {
 .planner-scroll { max-height: 550px; overflow: auto; }
 .planner-details + .planner-details { border-top: 1px solid var(--rule-light); }
 
-.dungeon-planner, .dungeon-planner > .panel, .tier-grid > .panel { margin-bottom: 18px; }
+.dungeon-planner, .dungeon-planner > .panel { margin-bottom: 18px; }
 .dungeon-planner > .notice { margin-bottom: 18px; }
 .dungeon-plan-card { margin: 0 14px 12px; }
 .dungeon-plan-card:last-child { margin-bottom: 14px; }
@@ -567,24 +590,19 @@ select {
 .quest-character-group { min-width: 0; padding: 9px; background: var(--paper-deep); }
 .quest-character-group p { margin-top: 5px; color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
 .quest-character-group a { color: var(--ink); text-decoration: underline; text-decoration-color: #8e6858; text-underline-offset: 2px; }
-.dungeon-plan-card .panel-note { margin-top: 5px; }
-.dungeon-index-panel { overflow: hidden; }
+.dungeon-card-content > .panel-note:first-child { border-top: 0; }
+.character-quest-row { padding: 11px 19px; }
+.character-quest-row .quest-character-status { margin-top: 2px; }
+.character-quest-groups { display: grid; gap: 7px; margin: 5px 0 3px; padding: 0; list-style: none; }
+.character-quest-groups li { display: grid; gap: 2px; padding-inline-start: 10px; border-inline-start: 2px solid var(--rule); }
+.character-quest-groups a { color: var(--accent); }
+.character-quest-groups a:hover { text-decoration: underline; }
 .dungeon-index .dungeon-plan-card { margin-top: 12px; }
 .dungeon-index .dungeon-plan-card:first-child { margin-top: 0; }
-.readiness-list { list-style: none; margin: 0; padding: 0; }
-.readiness-list li { display: grid; gap: 2px; padding: 15px 19px; border-top: 1px solid var(--rule-light); }
-.readiness-list li:first-child { border-top: 0; }
-.readiness-list li span, .coverage-meter span { color: var(--muted); font-size: .875rem; }
-.coverage-meter { display: flex; align-items: baseline; gap: 8px; padding: 17px 19px; background: var(--paper-deep); }
-.coverage-meter strong { color: var(--accent); font: 700 2.5rem/1 var(--display); }
-.coverage-meter + .detail-row:first-of-type { border-top: 0; }
-.steps-list { margin: 0; padding: 14px 20px 16px 42px; }
-.steps-list li { padding: 5px 0; }
-.steps-list code { color: var(--accent); }
-.tier-grid .tier-disclaimer { grid-column: 1 / -1; }
+.roster-row[hidden] { display: none; }
 [data-dungeon-card][hidden] { display: none; }
 
-.planner-section > summary, .planner-details summary {
+.planner-section > summary, .planner-details > summary {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -594,16 +612,14 @@ select {
   cursor: pointer;
 }
 
-.planner-section > summary::-webkit-details-marker, .planner-details summary::-webkit-details-marker { display: none; }
-.planner-section > summary:hover, .planner-section[open] > summary, .planner-details summary:hover, .planner-details[open] > summary { background: var(--paper-deep); }
-.planner-section > summary::before, .planner-details summary::before { content: "+"; width: 1em; color: var(--accent); font-weight: 750; }
+.planner-section > summary::-webkit-details-marker, .planner-details > summary::-webkit-details-marker { display: none; }
+.planner-section > summary:hover, .planner-section[open] > summary, .planner-details > summary:hover, .planner-details[open] > summary { background: var(--paper-deep); }
+.planner-section > summary::before, .planner-details > summary::before { content: "+"; width: 1em; color: var(--accent); font-weight: 750; }
 .planner-section[open] > summary::before, .planner-details[open] > summary::before { content: "−"; }
-.planner-section > summary > div, .planner-details summary > span:first-of-type { flex: 1; min-width: 0; }
-.planner-details summary > .subtle { margin-top: 0; }
+.planner-section > summary > div, .planner-details > summary > span:first-of-type { flex: 1; min-width: 0; }
+.planner-details > summary > .subtle { margin-top: 0; }
 .planner-section > summary h2 { font: 700 1.55rem/1.1 var(--display); text-transform: uppercase; }
 .planner-section > summary p { margin-top: 4px; }
-.planner-section > summary .section-hint { display: none; }
-.planner-details > summary .section-hint { margin-left: auto; }
 
 .loading { padding-block: 35px; color: var(--muted); }
 .site-footer { border-top: 1px solid var(--rule); color: var(--muted); }
@@ -676,7 +692,7 @@ dialog .form-status:empty { display: none; }
   .page-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
   .page-toolbar > label:first-child { grid-column: 1 / -1; }
   .full-roster .roster-row { grid-template-columns: 40px minmax(100px, 1fr) minmax(72px, auto) auto; gap: 6px; padding-inline: 10px; }
-  .full-roster .roster-label > :nth-child(3), .full-roster .rank, .full-roster .class-name { display: none; }
+  .full-roster .rank, .full-roster .class-name { display: none; }
   .full-roster .roster-sim small { max-width: 130px; }
   .full-roster .run-sim { min-height: 36px; padding: 6px 8px; font-size: .78rem; }
   .roster-row { grid-template-columns: 40px minmax(0, 1fr) minmax(60px, auto); gap: 7px; }
@@ -708,4 +724,7 @@ dialog .form-status:empty { display: none; }
   .full-roster .roster-row { grid-template-columns: 32px minmax(78px, 1fr) minmax(56px, auto) auto; gap: 4px; padding-inline: 6px; }
   .full-roster .roster-sim strong { font-size: 1.16rem; }
   .full-roster .run-sim { padding-inline: 6px; font-size: .7rem; }
+  .roster-label { letter-spacing: .025em; }
+  .sort-column { gap: 2px; }
+  .sort-indicator::after { font-size: .72rem; }
 }

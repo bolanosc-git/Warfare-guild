@@ -1,13 +1,12 @@
-import { esc, validUrl, dateLabel, intro, panel } from "./ui.js";
+import { esc, validUrl, dateLabel, intro, panel, bindSorting, sortData, sortSelect } from "./ui.js";
 import { bindPlanning, planningPage, profileTabs } from "./planning.js";
 import { demoCharacter, demoMembers, demoReports } from "./demo.js";
-import { tierPrepPage, simCoverage } from "./tier-prep.js";
+import { countRecentSims, latestReports, reportTime } from "./sim-reports.js";
 import { flushQueuedMutations, queuedMutationCount } from "./offline.js";
 
 const icons = {
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/>',
   swords: '<path d="m3 3 5 1 12 12m-4 0 4 4m-7-2 5-5M21 3l-5 1-4.2 4.2M9.4 10.6 4 16m4 0-4 4m7-2-5-5"/>',
-  pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
   shield: '<path d="M12 22s7-3 7-9V5l-7-3-7 3v8c0 6 7 9 7 9Z"/>',
   flame: '<path d="M13 2c2 6-2 7 2 10 0-2 2-3 3-4 3 5 2 13-6 14-6 0-9-4-8-8 1-4 5-5 5-9 1 1 3 3 3 5 2-3 2-6 1-8Z"/>',
   bolt: '<path d="m13 2-8 12h6l-1 8 9-12h-6l1-8Z"/>',
@@ -84,93 +83,62 @@ function characterMark(character) {
   return `<span class="class-icon" style="--class:${color}">${icon(symbol)}</span>`;
 }
 
-function rosterRows(members, full = false, reports = []) {
-  if (!members.length) return '<p class="empty">No matching characters.</p>';
-  const reportByCharacter = new Map();
-  for (const report of reports) {
-    const previous = reportByCharacter.get(report.characterId);
-    if (!previous || new Date(report.date ?? 0) > new Date(previous.date ?? 0)) reportByCharacter.set(report.characterId, report);
-  }
-  const header = full
-    ? '<div class="roster-row roster-label" role="row"><span class="level" role="columnheader">Level</span><span role="columnheader">Character</span><span class="class-name" role="columnheader">Class</span><span class="rank" role="columnheader">Rank</span><span class="sim-cell" role="columnheader">Latest DPS</span><span class="sim-action" role="columnheader">Action</span></div>'
-    : '<div class="roster-row roster-label"><span class="level">Level</span><span>Character</span><span>Class</span></div>';
-  return header + members.map(character => {
+const reportHosts = ["mythicsim.com", "www.mythicsim.com", "www.raidbots.com", "raidbots.com", "mimiron.raidbots.com"];
+
+function rosterHeader(target, key, label, className = "", direction = "asc") {
+  return `<span class="${className}" role="columnheader"><button type="button" class="sort-column"
+    data-sort-column="${target}" data-sort-key="${key}" data-sort-direction="${direction}">${label}<span class="sort-indicator" aria-hidden="true"></span></button></span>`;
+}
+
+function rosterRows(members, full = false, reports = new Map(), reportError = false) {
+  if (!members.length) return '<p class="empty">No characters on the roster.</p>';
+  const target = full ? "roster" : "overview-roster";
+  const header = rosterHeader(target, "level", "Level", "level", "desc") +
+    rosterHeader(target, "name", "Character") + rosterHeader(target, "class", "Class", "class-name") +
+    (full ? rosterHeader(target, "rank", "Rank", "rank") + rosterHeader(target, "dps", "Latest DPS", "sim-cell", "desc") +
+      '<span class="sim-action" role="columnheader">Action</span>' : "");
+  const rows = members.map(character => {
     const [color] = classStyle(character);
     const rank = character.rank === 0 ? "Guild Master" : Number.isInteger(character.rank) ? `Rank ${character.rank}` : "—";
     const caption = full ? [character.className, rank === "—" ? character.race : rank].filter(Boolean).join(" · ") :
       character.rank === 0 ? rank : character.race || "Horde";
-    const name = `<a class="person" href="/character/${encodeURIComponent(character.slug)}" data-nav style="--class:${color}">${characterMark(character)}<span><strong>${esc(character.name)}</strong><small${full ? ' class="mobile-caption"' : ""}>${esc(caption)}</small></span></a>`;
-    if (!full) return `<div class="roster-row roster-entry line" style="--class:${color}"><span class="level">${esc(character.level ?? "—")}</span>${name}<span class="class-name">${esc(character.className)}</span></div>`;
-    const report = reportByCharacter.get(character.id);
-    const reportUrl = report ? validUrl(report.url, ["mythicsim.com", "www.mythicsim.com"]) : "";
-    const result = report ? `<span class="roster-sim"><strong>${number.format(report.dps)}</strong><small>${esc(report.scenario)} · ${dateLabel(report.date)}</small></span>` : '<span class="roster-sim"><span class="subtle">No sim yet</span></span>';
-    const runSim = `<a class="button quiet run-sim" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener" aria-label="Run MythicSim for ${esc(character.name)}">Run Sim</a>`;
-    const sim = reportUrl ? `<a class="roster-sim-link" href="${reportUrl}" target="_blank" rel="noopener" aria-label="View ${esc(character.name)}’s latest MythicSim result">${result}</a>` : result;
-    return `<div class="roster-row roster-entry line" role="row" data-roster-row data-name="${esc(character.name.toLocaleLowerCase())}" data-class="${esc(character.className.toLocaleLowerCase())}" data-rank="${Number.isInteger(character.rank) ? character.rank : 999}" data-level="${Number(character.level) || 0}" data-dps="${report ? report.dps : -1}" data-sim-date="${report ? new Date(report.date ?? 0).getTime() : 0}">
-      <span class="level" role="cell">${esc(character.level ?? "—")}</span><span role="cell">${name}</span><span class="class-name" role="cell">${esc(character.className)}</span><span class="rank" role="cell">${esc(rank)}</span><span class="sim-cell" role="cell">${sim}</span><span class="sim-action" role="cell">${runSim}</span>
-    </div>`;
-  }).join("");
-}
-
-function simRows(reports, detailed = false) {
-  if (!reports.length) return '<p class="empty">No simulation reports yet.</p>';
-  const members = new Map(state.members.map(character => [character.id, character]));
-  const rows = [...reports].sort((left, right) => new Date(right.date ?? 0) - new Date(left.date ?? 0));
-  return `<div class="${detailed ? "report-table" : ""}"${detailed ? ' data-report-list' : ""}>` + rows.map(report => {
-    const member = members.get(report.characterId);
-    const character = member
-      ? `<a href="/character/${encodeURIComponent(member.slug)}" data-nav>${esc(member.name)}</a>`
-      : esc(report.characterName ?? "Former guild member");
-    const href = validUrl(report.url, ["mythicsim.com", "www.mythicsim.com", "www.raidbots.com", "raidbots.com", "mimiron.raidbots.com"]);
-    return `<div class="sim-row line"${detailed ? ` data-report-row data-scenario="${esc((report.scenario ?? "").toLocaleLowerCase())}" data-dps="${Number(report.dps) || 0}" data-date="${new Date(report.date ?? 0).getTime()}"` : ""}>
-      <div><strong>${character}</strong><p class="subtle">${report.provider ? `${esc(report.provider)} · ` : ""}${esc(report.scenario)} · ${report.dateKind === "imported" ? "Imported " : ""}${dateLabel(report.date)}</p></div>
-      <span class="sim-number">${number.format(report.dps)}<small>DPS</small></span>
-      ${detailed && href ? `<a class="link" href="${href}" target="_blank" rel="noopener">View report</a>` : ""}</div>`;
-  }).join("") + "</div>";
-}
-
-function bindReportSorting(root) {
-  root.querySelectorAll("[data-report-sort]").forEach(select => select.addEventListener("change", () => {
-    const list = select.closest(".panel")?.querySelector("[data-report-list]");
-    if (!list) return;
-    const field = select.value;
-    const rows = [...list.querySelectorAll("[data-report-row]")];
-    rows.sort((left, right) => {
-      const a = left.dataset[field] ?? "";
-      const b = right.dataset[field] ?? "";
-      return field === "scenario" ? a.localeCompare(b) : Number(b) - Number(a);
-    });
-    list.append(...rows);
-  }));
-}
-
-function bindSortControls(root) {
-  root.querySelectorAll("[data-sort-target]").forEach(select => {
-    const sort = () => {
-      const list = root.querySelector(`[data-sort-list="${select.dataset.sortTarget}"]`);
-      if (!list) return;
-      const [field, direction = "asc"] = select.value.split(":");
-      const rows = [...list.querySelectorAll(":scope > [data-sort-row]")];
-      rows.sort((left, right) => {
-        const a = left.dataset[field] ?? "";
-        const b = right.dataset[field] ?? "";
-        const comparison = field === "name" ? a.localeCompare(b) : Number(a) - Number(b);
-        return direction === "desc" ? -comparison : comparison;
-      });
-      list.append(...rows);
+    const name = `<a class="person" href="/character/${encodeURIComponent(character.slug)}" data-nav>${characterMark(character)}<span><strong>${esc(character.name)}</strong><small${full ? ' class="mobile-caption"' : ""}>${esc(caption)}</small></span></a>`;
+    const report = reports.get(character.id);
+    const values = {
+      name: character.name, class: character.className, rank: character.rank, level: character.level,
+      dps: report?.dps, date: reportTime(report)
     };
-    select.addEventListener("change", sort);
-    sort();
-  });
+    const cells = `<span class="level" role="cell">${esc(character.level ?? "—")}</span>
+      <span role="cell">${name}</span><span class="class-name" role="cell">${esc(character.className)}</span>`;
+    let simCells = "";
+    if (full) {
+      const reportUrl = validUrl(report?.url, reportHosts);
+      const result = report
+        ? `<span class="roster-sim"><strong>${number.format(report.dps)}</strong><small>${esc(report.scenario)} · ${dateLabel(report.date)}</small></span>`
+        : `<span class="roster-sim subtle">${reportError ? "Unavailable" : "No sim yet"}</span>`;
+      const sim = reportUrl ? `<a class="roster-sim-link" href="${reportUrl}" target="_blank" rel="noopener">${result}</a>` : result;
+      const runSim = `<a class="button quiet run-sim" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener" aria-label="Run MythicSim for ${esc(character.name)}">Run Sim</a>`;
+      simCells = `<span class="rank" role="cell">${esc(rank)}</span><span class="sim-cell" role="cell">${sim}</span><span class="sim-action" role="cell">${runSim}</span>`;
+    }
+    return `<div class="roster-row roster-entry line" role="row" ${sortData(values)} style="--class:${color}">${cells}${simCells}</div>`;
+  }).join("");
+  return `<div role="table" aria-label="${full ? "Guild characters" : "Roster preview"}">
+    <div class="roster-row roster-label" role="row">${header}</div>
+    <div role="rowgroup" data-sort-list="${target}" data-sort-default="${full ? "rank:asc" : "name:asc"}">${rows}</div>
+  </div>`;
 }
 
-function latestReports(reports) {
-  const latest = new Map();
-  for (const report of reports) {
-    const previous = latest.get(report.characterId);
-    if (!previous || new Date(report.date ?? 0) > new Date(previous.date ?? 0)) latest.set(report.characterId, report);
-  }
-  return [...latest.values()].sort((left, right) => new Date(right.date ?? 0) - new Date(left.date ?? 0));
+function simRows(reports, character) {
+  if (!reports.length) return '<p class="empty">No simulation reports yet.</p>';
+  const rows = reports.map(report => {
+    const href = validUrl(report.url, reportHosts);
+    const values = { scenario: report.scenario, dps: report.dps, date: reportTime(report) };
+    return `<div class="sim-row line" ${sortData(values)}>
+      <div><strong>${esc(report.scenario || character.name)}</strong><p class="subtle">${report.provider ? `${esc(report.provider)} · ` : ""}${report.dateKind === "imported" ? "Imported " : ""}${dateLabel(report.date)}</p></div>
+      <span class="sim-number">${number.format(report.dps)}<small>DPS</small></span>
+      ${href ? `<a class="link" href="${href}" target="_blank" rel="noopener">View report</a>` : ""}</div>`;
+  }).join("");
+  return `<div class="report-table" data-sort-list="sim-history">${rows}</div>`;
 }
 
 function atlasEntry(symbol, title, description, label, href) {
@@ -188,7 +156,7 @@ function overview() {
       <div class="hero-content">
         <p class="eyebrow">World of Warcraft: Forever</p>
         <h1>Warfare</h1>
-        <p class="intro-description">Choose your next dungeon, review character builds, and follow the progress of Warfare’s Horde roster.</p>
+        <p class="intro-description">See which quests guildmates are on and choose the next dungeon to run together.</p>
         <div class="actions">
           <a class="button primary" href="/dungeon-planner" data-nav>Plan next dungeon</a>
           <a class="button" href="/roster" data-nav>Browse roster</a>
@@ -199,9 +167,8 @@ function overview() {
       ${sourceNote()}
       ${panel("Guild roster", guildSize, rosterRows(state.members.slice(0, 4)), '<a href="/roster" data-nav class="link">Full roster</a>')}
       ${panel("Guild tools", "", [
-        atlasEntry("crosshair", "Dungeon planner", "Use shared quests and levels to choose what to tackle next.", "Open planner", "/dungeon-planner"),
-        atlasEntry("users", "Character progress", "Active quests, dungeon clears, and attunements.", "Choose a character", "/roster"),
-        atlasEntry("shield", "Tier 1 readiness", "Track level and sim coverage before the next tier.", "View prep", "/tier-prep")
+        atlasEntry("crosshair", "Dungeon planner", "Compare active quests and see who’s in level range.", "Open planner", "/dungeon-planner"),
+        atlasEntry("users", "Character progress", "Active quests, dungeon clears, and attunements.", "Choose a character", "/roster")
       ].join(""))}
     </div>`;
 }
@@ -225,56 +192,69 @@ function roster(reports, reportError) {
   const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish sim result</button>' : "";
   const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener">Run Sim on MythicSim</a>';
   const armoryLink = '<a class="button quiet" href="https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/guild/warfare" target="_blank" rel="noopener">Blizzard Armory</a>';
-  const coverage = simCoverage(state.members, reports);
+  const latest = latestReports(reports);
+  const recent = countRecentSims(state.members, latest);
+  const order = [
+    ["rank:asc", "Guild rank (highest first)"], ["rank:desc", "Guild rank (lowest first)"],
+    ["name:asc", "Character (A–Z)"], ["name:desc", "Character (Z–A)"],
+    ["class:asc", "Class (A–Z)"], ["class:desc", "Class (Z–A)"],
+    ["level:desc", "Highest level"], ["level:asc", "Lowest level"],
+    ["dps:desc", "Highest DPS"], ["dps:asc", "Lowest DPS"],
+    ["date:desc", "Newest sim"], ["date:asc", "Oldest sim"]
+  ];
   return intro("Guild roster", "Browse Warfare’s characters, gear, talents, professions, and latest DPS sims.", { action: openSimulator + importButton + armoryLink }) + `
     <div class="frame content">
       ${sourceNote()}
       ${reportError ? notice(reportError) : ""}${status ? notice(status) : ""}
-      <p class="roster-sim-summary">${coverage.current} of ${coverage.total} characters have a sim from the last 30 days. Each row shows the latest published result.</p>
+      ${reportError ? "" : `<p class="roster-sim-summary">${recent} of ${state.members.length} characters have a sim from the last 30 days. Each row shows the latest published result.</p>`}
       <form class="page-toolbar" data-roster-filters>
         <label>Search characters <input type="search" name="search" placeholder="Search by character name" autocomplete="off"></label>
         <label>Class <select name="className"><option value="">All classes</option>${classes.map(name => `<option>${esc(name)}</option>`).join("")}</select></label>
-        <label>Sort by <select name="sort"><option value="rank">Guild rank</option><option value="name">Character name</option><option value="class">Class</option><option value="level">Highest level</option><option value="dps">Highest DPS</option><option value="sim">Most recent sim</option></select></label>
+        ${sortSelect("roster", order, "guild roster")}
       </form>
       <p class="result-count" aria-live="polite"></p>
-      <section class="panel full-roster" data-roster-results aria-label="Characters" role="table"></section>
+      <section class="panel full-roster" aria-label="Characters">
+        ${rosterRows(state.members, true, latest, Boolean(reportError))}
+        ${state.members.length ? '<p class="empty" data-roster-empty hidden>No matching characters.</p>' : ""}
+      </section>
       ${importButton ? reportDialog() : ""}
     </div>`;
 }
 
-function updateRoster(form, reports) {
-  const { search, className, sort } = Object.fromEntries(new FormData(form));
-  const query = search.trim().toLocaleLowerCase();
-  const members = state.members.filter(character => character.name.toLocaleLowerCase().includes(query) && (!className || character.className === className));
-  const reportMap = new Map(latestReports(reports).map(report => [report.characterId, report]));
-  const compareName = (left, right) => left.name.localeCompare(right.name);
-  if (sort === "name") members.sort(compareName);
-  if (sort === "class") members.sort((left, right) => left.className.localeCompare(right.className) || compareName(left, right));
-  if (sort === "level") members.sort((left, right) => (right.level ?? 0) - (left.level ?? 0) || compareName(left, right));
-  if (sort === "dps") members.sort((left, right) => (reportMap.get(right.id)?.dps ?? -1) - (reportMap.get(left.id)?.dps ?? -1) || compareName(left, right));
-  if (sort === "sim") members.sort((left, right) => new Date(reportMap.get(right.id)?.date ?? 0) - new Date(reportMap.get(left.id)?.date ?? 0) || compareName(left, right));
-  if (sort === "rank") members.sort((left, right) => (left.rank ?? Infinity) - (right.rank ?? Infinity) || compareName(left, right));
-  document.querySelector(".result-count").textContent = `${members.length} of ${state.members.length} characters`;
-  document.querySelector("[data-roster-results]").innerHTML = rosterRows(members, true, reports);
+function bindRosterFilters(form) {
+  const rows = [...main.querySelectorAll('[data-sort-list="roster"] > [data-sort-values]')].map(row => ({
+    row, values: JSON.parse(row.dataset.sortValues)
+  }));
+  const count = main.querySelector(".result-count");
+  const noMatches = main.querySelector("[data-roster-empty]");
+  const update = () => {
+    const { search, className } = Object.fromEntries(new FormData(form));
+    const query = search.trim().toLocaleLowerCase();
+    let visible = 0;
+    for (const { row, values } of rows) {
+      row.hidden = !values.name.toLocaleLowerCase().includes(query) || Boolean(className && values.class !== className);
+      if (!row.hidden) visible++;
+    }
+    count.textContent = `${visible} of ${rows.length} characters`;
+    if (noMatches) noMatches.hidden = visible > 0;
+  };
+  form.addEventListener("input", update);
+  form.addEventListener("submit", event => event.preventDefault());
+  update();
 }
 
 const empty = message => `<p class="empty">${esc(message)}</p>`;
-
-function detailRow(name, subtitle, value) {
-  return `<li class="detail-row line"><span class="gear-name"><span><strong>${esc(name)}</strong>
-    ${subtitle ? `<small>${esc(subtitle)}</small>` : ""}</span></span><span class="level">${esc(value)}</span></li>`;
-}
 
 function wowheadLink(kind, id, name) {
   return `<a href="https://www.wowhead.com/forever/${kind}=${id}" data-wowhead="${kind}=${id}&amp;domain=forever" target="_blank" rel="noopener">${esc(name)}</a>`;
 }
 
-function detailMarkupRow(name, subtitle, value) {
-  return `<li class="detail-row line"><span class="gear-name"><span><strong>${name}</strong>${subtitle ? `<small>${esc(subtitle)}</small>` : ""}</span></span><span class="level">${esc(value)}</span></li>`;
+function detailMarkupRow(name, subtitle, value, keys) {
+  return `<li class="detail-row line" ${sortData(keys)}><span class="gear-name"><span><strong>${name}</strong>${subtitle ? `<small>${esc(subtitle)}</small>` : ""}</span></span><span class="level">${esc(value)}</span></li>`;
 }
 
-function detailList(items, mapper, message) {
-  return items.length ? `<ul class="profile-list">${items.map(mapper).join("")}</ul>` : empty(message);
+function detailList(items, mapper, target, message) {
+  return items.length ? `<ul class="profile-list" data-sort-list="${target}">${items.map(mapper).join("")}</ul>` : empty(message);
 }
 
 function characterPage(character, { reports, reportError }) {
@@ -282,23 +262,43 @@ function characterPage(character, { reports, reportError }) {
   const armory = validUrl(character.armoryUrl, ["worldofwarcraft.blizzard.com"]);
   const label = [character.level && `Level ${character.level}`, character.race, character.className].filter(Boolean).join(" · ");
   const history = reports.filter(report => report.characterId === character.id);
-  const gear = detailList(character.gear, item => detailMarkupRow(item.id ? wowheadLink("item", item.id, item.name) : esc(item.name),
-    [item.slot, item.qualityLabel, item.enchant].filter(Boolean).join(" · "), item.level ? `iLvl ${item.level}` : ""),
-    "Equipment details are unavailable.");
-  const talents = character.talents.length ? character.talents.map(tree => `<div class="tree-heading">${esc(tree.name)}${Number.isFinite(tree.points) ? ` · ${tree.points} points` : ""}</div>` +
-    detailList(tree.talents, talent => detailMarkupRow(talent.spellId ? wowheadLink("spell", talent.spellId, talent.name) : esc(talent.name), "", talent.rank ? `Rank ${talent.rank}` : ""), "No ranked talents reported.")).join("") : empty("Talent details are unavailable.");
-  const professions = detailList(character.professions, profession => detailRow(profession.name, [profession.group, profession.tier].filter(Boolean).join(" · "), Number.isFinite(profession.current) ? `${profession.current}${profession.max ? ` / ${profession.max}` : ""}` : ""), "Profession details are unavailable.");
+  const gear = detailList(character.gear, (item, index) => detailMarkupRow(item.id ? wowheadLink("item", item.id, item.name) : esc(item.name),
+    [item.slot, item.qualityLabel, item.enchant].filter(Boolean).join(" · "), item.level ? `iLvl ${item.level}` : "",
+    { index, name: item.name, slot: item.slot, level: item.level }), "equipment", "Equipment details are unavailable.");
+  const gearOrder = [
+    ["index:asc", "Equipped order"], ["slot:asc", "Slot (A–Z)"], ["slot:desc", "Slot (Z–A)"],
+    ["name:asc", "Item (A–Z)"], ["name:desc", "Item (Z–A)"], ["level:desc", "Highest item level"], ["level:asc", "Lowest item level"]
+  ];
+  const talentOrder = [["index:asc", "Tree order"], ["name:asc", "Talent (A–Z)"], ["name:desc", "Talent (Z–A)"], ["rank:desc", "Highest rank"], ["rank:asc", "Lowest rank"]];
+  const talents = character.talents.length ? character.talents.map((tree, index) => {
+    const target = `talents-${index}`;
+    const title = `${esc(tree.name)}${Number.isFinite(tree.points) ? ` · ${tree.points} points` : ""}`;
+    const rows = detailList(tree.talents, (talent, index) => detailMarkupRow(
+      talent.spellId ? wowheadLink("spell", talent.spellId, talent.name) : esc(talent.name), "",
+      talent.rank ? `Rank ${talent.rank}` : "", { index, name: talent.name, rank: talent.rank }),
+      target, "No ranked talents reported.");
+    return `<div class="tree-heading"><span>${title}</span>${tree.talents.length ? sortSelect(target, talentOrder, `${tree.name} talents`) : ""}</div>${rows}`;
+  }).join("") : empty("Talent details are unavailable.");
+  const professions = detailList(character.professions, (profession, index) => detailMarkupRow(
+    esc(profession.name), [profession.group, profession.tier].filter(Boolean).join(" · "),
+    Number.isFinite(profession.current) ? `${profession.current}${profession.max ? ` / ${profession.max}` : ""}` : "",
+    { index, name: profession.name, group: profession.group, skill: profession.current }), "professions", "Profession details are unavailable.");
+  const professionOrder = [
+    ["index:asc", "Armory order"], ["name:asc", "Profession (A–Z)"], ["name:desc", "Profession (Z–A)"],
+    ["group:asc", "Profession type (A–Z)"], ["group:desc", "Profession type (Z–A)"], ["skill:desc", "Highest skill"], ["skill:asc", "Lowest skill"]
+  ];
+  const simOrder = [["date:desc", "Newest"], ["date:asc", "Oldest"], ["dps:desc", "Highest DPS"], ["dps:asc", "Lowest DPS"], ["scenario:asc", "Encounter (A–Z)"], ["scenario:desc", "Encounter (Z–A)"]];
   return intro(character.name, label, { back: true, mark: characterMark(character), action: armory ? `<a class="button" href="${armory}" target="_blank" rel="noopener">Blizzard Armory</a>` : "" }) + `
     <div class="frame content">
       ${sourceNote()}
       ${profileTabs(character, false)}
       ${character.profileUnavailable ? notice(character.profileUnavailable) : ""}
       <div class="profile-grid">
-        ${panel("Equipment", character.itemLevel ? `Average item level ${character.itemLevel}` : "Equipped gear", gear)}
+        ${panel("Equipment", character.itemLevel ? `Average item level ${character.itemLevel}` : "Equipped gear", gear, character.gear.length ? sortSelect("equipment", gearOrder, "equipment") : "")}
         <div class="profile-stack">
           ${panel("Talents", "", talents)}
-          ${panel("Professions", "", professions)}
-          ${panel("DPS history", "", reportError ? notice(reportError) : simRows(history, true), '<label class="compact-sort"><span>Sort</span><select data-report-sort aria-label="Sort DPS history"><option value="date">Newest</option><option value="dps">Highest DPS</option><option value="scenario">Encounter</option></select></label>')}
+          ${panel("Professions", "", professions, character.professions.length ? sortSelect("professions", professionOrder, "professions") : "")}
+          ${panel("DPS history", "", reportError ? notice(reportError) : simRows(history, character), history.length ? sortSelect("sim-history", simOrder, "DPS history") : "")}
         </div>
       </div>
       ${character.updatedAt ? `<p class="subtle">Armory snapshot · ${dateLabel(character.updatedAt)}</p>` : ""}
@@ -333,6 +333,7 @@ async function submitReport(event) {
 async function render(moveFocus = true) {
   const request = ++renderRequest;
   if (/^\/simulations\/?$/.test(location.pathname)) history.replaceState({}, "", "/roster");
+  if (/^\/(?:tier-prep|group-up)\/?$/.test(location.pathname)) history.replaceState({}, "", "/dungeon-planner");
   const path = location.pathname.replace(/\/$/, "") || "/";
   activeNav(path);
   if (moveFocus) {
@@ -344,13 +345,11 @@ async function render(moveFocus = true) {
     if (!state || Date.now() - lastFetch > 300_000) await loadGuild();
     let result, title;
     let completed = [];
-    let currentReports = [];
     if (path === "/") {
       result = overview();
       title = "Warfare";
     } else if (path === "/roster") {
       const reportData = await loadReports();
-      currentReports = reportData.reports;
       result = roster(reportData.reports, reportData.reportError);
       title = "Guild Roster | Warfare";
     } else if (path === "/dungeon-planner" || /^\/character\/[^/]+\/progress$/.test(path)) {
@@ -359,12 +358,8 @@ async function render(moveFocus = true) {
       const character = slug ? state.members.find(member => member.slug === slug) : null;
       const query = view === "character" ? `character&slug=${encodeURIComponent(slug)}` : view;
       const data = slug && !character ? {} : await get(`/api/planning?view=${query}`) ?? {};
-      ({ result, title, completed } = planningPage(view, data, character, status));
-    } else if (path === "/tier-prep") {
-      const { reports, reportError } = await loadReports();
-      result = tierPrepPage(state.members, reports);
-      if (reportError) result = result.replace('<div class="frame content tier-grid">', `<div class="frame content tier-grid">${notice(reportError)}`);
-      title = "Tier 1 Readiness | Warfare";
+      const planningData = view === "planner" && !data.characters?.length ? { ...data, characters: state.members } : data;
+      ({ result, title, completed } = planningPage(view, planningData, character, status));
     } else if (path.startsWith("/character/")) {
       const slug = decodeURIComponent(path.slice("/character/".length));
       const [character, reports] = await Promise.all([
@@ -385,13 +380,8 @@ async function render(moveFocus = true) {
     main.innerHTML = result;
     requestAnimationFrame(() => globalThis.WH?.Tooltips?.refreshLinks?.(true));
     const filters = main.querySelector("[data-roster-filters]");
-    if (filters) {
-      filters.addEventListener("input", () => updateRoster(filters, currentReports));
-      filters.addEventListener("submit", event => event.preventDefault());
-      updateRoster(filters, currentReports);
-    }
-    bindSortControls(main);
-    bindReportSorting(main);
+    if (filters) bindRosterFilters(filters);
+    bindSorting(main);
     if (main.querySelector("[data-planning]")) bindPlanning(main, state.members, message => {
       if (request !== renderRequest) return;
       status = message;

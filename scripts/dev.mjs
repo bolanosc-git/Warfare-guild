@@ -16,7 +16,7 @@ const port = Number(process.env.PORT || 3000);
 createServer(async (input, output) => {
   try {
     const url = new URL(input.url, `http://localhost:${port}`);
-    if (/^\/(?:group-up|simulations)\/?$/.test(url.pathname)) {
+    if (/^\/(?:group-up|simulations|tier-prep)\/?$/.test(url.pathname)) {
       output.writeHead(308, { Location: url.pathname.includes("simulations") ? "/roster" : "/dungeon-planner" }).end();
       return;
     }
@@ -31,7 +31,7 @@ createServer(async (input, output) => {
       if (response.body) return Readable.fromWeb(response.body).pipe(output);
       return output.end();
     }
-    const spa = /^\/(?:roster\/?|dungeon-planner\/?|tier-prep\/?|character\/[^/]+(?:\/progress)?\/?|)$/.test(url.pathname);
+    const spa = /^\/(?:roster\/?|dungeon-planner\/?|character\/[^/]+(?:\/progress)?\/?|)$/.test(url.pathname);
     const file = spa ? resolve(root, "index.html") : resolve(root, `.${decodeURIComponent(url.pathname)}`);
     const path = relative(root, file);
     if (isAbsolute(path) || path === ".." || path.startsWith("../") || !(await stat(file)).isFile()) return output.writeHead(404).end();
