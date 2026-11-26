@@ -1,5 +1,5 @@
 import { dungeons, unlocks } from "./progress-catalog.js";
-import { esc, intro, panel, validUrl } from "./ui.js";
+import { esc, intro, validUrl } from "./ui.js";
 import { dungeonQuestById } from "./dungeon-quests.js";
 import { queueMutation } from "./offline.js";
 
@@ -18,8 +18,15 @@ function action(label, payload, primary = false) {
   return `<button type="button" class="button ${primary ? "primary" : "quiet"}" data-planning-action="${esc(JSON.stringify(payload))}">${esc(label)}</button>`;
 }
 
-function section(label, text, inner, control = "") {
-  return panel(label, text, inner, control);
+function collapsibleSection(label, text, inner, open = false, tools = "") {
+  return `<details class="panel planner-section"${open ? " open" : ""}>
+    <summary class="panel-heading"><div><h2>${esc(label)}</h2>${text ? `<p>${esc(text)}</p>` : ""}</div></summary>
+    ${tools}<div class="planner-section-body">${inner}</div>
+  </details>`;
+}
+
+function sortSelect(target, options, label = "Sort") {
+  return `<label class="compact-sort"><span>${esc(label)}</span><select data-sort-target="${esc(target)}" aria-label="${esc(label)}">${options.map(([value, name]) => `<option value="${esc(value)}">${esc(name)}</option>`).join("")}</select></label>`;
 }
 
 export function profileTabs(character, progress) {
@@ -27,12 +34,13 @@ export function profileTabs(character, progress) {
   return `<nav class="profile-tabs" aria-label="Character sections"><a class="button" href="${url}" data-nav ${!progress ? 'aria-current="page"' : ""}>Gear &amp; build</a><a class="button" href="${url}/progress" data-nav ${progress ? 'aria-current="page"' : ""}>Progress</a></nav>`;
 }
 
-function listRow(title, detail, control = "", badge = "") {
-  return `<div class="detail-row line"><div class="planner-row-title"><div class="planner-row-heading"><strong>${title}</strong>${badge}</div>${detail ? `<small>${detail}</small>` : ""}</div>${control}</div>`;
+function listRow(title, detail, control = "", badge = "", sort = null) {
+  const sortAttrs = sort ? ` data-sort-row data-name="${esc(String(sort.name ?? "").toLocaleLowerCase())}" data-id="${Number(sort.id) || 0}" data-status="${Number(sort.status) || 0}" data-level="${Number(sort.level) || 0}" data-catalog="${Number(sort.catalog) || 0}"` : "";
+  return `<div class="detail-row line"${sortAttrs}><div class="planner-row-title"><div class="planner-row-heading"><strong>${title}</strong>${badge}</div>${detail ? `<small>${detail}</small>` : ""}</div>${control}</div>`;
 }
 
 function questList(quests) {
-  return quests.map(quest => listRow(esc(quest.name), `Quest #${quest.id}`)).join("");
+  return quests.map(quest => listRow(esc(quest.name), `Quest #${quest.id}`, "", "", { name: quest.name, id: quest.id })).join("");
 }
 
 function availableQuests(progress) {
@@ -43,18 +51,21 @@ function availableQuests(progress) {
     ? questList(active.quests) || empty("No active quests in the latest snapshot.")
     : empty("The Armory has no active quest snapshot available.");
   const done = completed?.available
-    ? `<div class="planner-filter"><label for="completed-query">Find a completed quest</label><input type="search" id="completed-query" data-completed-query placeholder="Search by name or ID"><p class="subtle" data-completed-count></p></div>
-        <div class="quest-results" data-completed-results role="region" aria-label="Completed quest results" tabindex="0">${empty("Loading quest history…")}</div>
+    ? `<div class="planner-filter"><label for="completed-query">Find a completed quest</label><input type="search" id="completed-query" data-completed-query placeholder="Search by name or ID">${sortSelect("completed-quests", [["name:asc", "Quest name"], ["id:asc", "Quest ID"]])}<p class="subtle" data-completed-count></p></div>
+        <div class="quest-results" data-completed-results data-sort-list="completed-quests" role="region" aria-label="Completed quest results" tabindex="0">${empty("Loading quest history…")}</div>
         <div data-completed-more></div>`
     : empty("The Armory has no completed quest history available.");
-  return `<div class="quest-grid">${section("Active quests", synced, list)}${section("Completed quests", completed?.available ? `${completed.quests.length} recorded by the Armory` : "", done)}</div>`;
+  const activeSection = collapsibleSection("Active quests", synced, `<div data-sort-list="active-quests">${list}</div>`, true,
+    sortSelect("active-quests", [["name:asc", "Quest name"], ["id:asc", "Quest ID"]]));
+  const completedSection = collapsibleSection("Completed quests", completed?.available ? `${completed.quests.length} recorded by the Armory` : "", done);
+  return `<div class="quest-grid">${activeSection}${completedSection}</div>`;
 }
 
 function dungeonChecklist(member, entries, progress, writable, canImport) {
   const statuses = new Map(entries.filter(entry => entry.kind === "dungeon").map(entry => [entry.entry_key, entry.data]));
   const logEntries = new Map(entries.filter(entry => entry.kind === "dungeon-log").map(entry => [entry.entry_key, entry.data]));
   const fromArmory = new Map((progress?.encounters ?? []).map(entry => [entry.name.toLowerCase(), entry.status]));
-  const rows = dungeons.map(dungeon => {
+  const rows = dungeons.map((dungeon, catalogIndex) => {
     const row = statuses.get(dungeon.id) ?? {};
     const imported = logEntries.get(dungeon.id) ?? {};
     const observed = fromArmory.get(dungeon.name.toLowerCase());
@@ -63,19 +74,22 @@ function dungeonChecklist(member, entries, progress, writable, canImport) {
     const log = validUrl(row.log || imported.log, reportHosts);
     const tags = [`Levels ${dungeon.levels}`, row.note, imported.kills?.length ? `${imported.kills.length} logged boss kills` : "",
       row.status ? "Guild record" : observed ? "Blizzard Armory" : imported.status ? "Warcraft Logs" : ""].filter(Boolean);
+    const level = Number(dungeon.levels.split(/[–-]/)[0]) || 0;
+    const status = { none: 0, partial: 1, cleared: 2 }[current];
     return listRow(esc(dungeon.name), tags.map(esc).join(" · ") + (log ? ` · <a class="link" href="${log}" target="_blank" rel="noopener">View log</a>` : ""),
       writable ? action("Edit", { action: "dungeon", character: member.slug, dungeon: dungeon.id, name: dungeon.name, progress: row.status ?? current, note: row.note ?? "", log: row.log ?? "", canImport }) : "",
-      `<span class="status-tag status-${current}">${dungeonStatus[current]}</span>`);
+      `<span class="status-tag status-${current}">${dungeonStatus[current]}</span>`, { name: dungeon.name, level, status, catalog: catalogIndex });
   }).join("");
-  return section("Dungeon checklist", "A clear applies to the listed dungeon or wing. Guild entries can include a Warcraft Logs link.",
-    `<div class="planner-scroll">${rows}</div>`);
+  const tools = `<div class="planner-section-tools">${sortSelect("character-dungeons", [["catalog:asc", "Catalog order"], ["name:asc", "Dungeon name"], ["status:asc", "Needs progress first"], ["status:desc", "Most complete first"], ["level:asc", "Lowest level"]])}</div>`;
+  return collapsibleSection("Dungeon checklist", "A clear applies to the listed dungeon or wing. Guild entries can include a Warcraft Logs link.",
+    `<div class="planner-scroll" data-sort-list="character-dungeons">${rows}</div>`, true, tools);
 }
 
 function unlockChecklist(member, entries, progress, writable) {
   const completed = new Set(entries.filter(entry => entry.kind === "unlock").map(entry => entry.entry_key));
   const armoryNames = new Set((progress?.completed.quests ?? []).filter(quest => !quest.name.startsWith("Quest #")).map(quest => quest.name.toLowerCase()));
   const manualOnly = new Set(["upper-blackrock-spire-1", "upper-blackrock-spire-2"]);
-  return section("Attunements & unlocks", "Horde checklists with Armory matches and guild-confirmed steps.",
+  return collapsibleSection("Attunements & unlocks", "Horde checklists with Armory matches and guild-confirmed steps.",
     unlocks.map(unlock => {
       const isSynced = step => !manualOnly.has(step.id) && armoryNames.has(step.name.toLowerCase());
       const count = unlock.steps.filter(step => completed.has(step.id) || isSynced(step)).length;
@@ -121,6 +135,9 @@ export function buildDungeonPlan(data) {
     quests: (row.guide?.quests ?? []).map(quest => ({
       ...quest,
       active: activeQuests.get(quest.id) ?? [],
+      completedMembers: characters.filter(character => character.completedAvailable && completedQuests.get(quest.id)?.has(character.id)),
+      incompleteMembers: characters.filter(character => character.completedAvailable && !completedQuests.get(quest.id)?.has(character.id)),
+      unknownMembers: characters.filter(character => !character.completedAvailable),
       completed: completedQuests.get(quest.id)?.size ?? 0,
       checked: characters.filter(character => character.completedAvailable).length
     }))
@@ -131,22 +148,36 @@ function questProgressLines(row) {
   if (!row.quests.length) return row.guide
     ? empty("This guide has no quest references in the current index.")
     : '<p class="empty">No Wowhead Forever dungeon guide is indexed yet.</p>';
-  return row.quests.map(quest => {
+  return row.quests.map((quest, index) => {
     const activeNames = quest.active.map(member => memberLink(member, true)).join(", ") || "None active in the latest snapshots";
-    const completion = quest.checked ? `${quest.completed} complete · ${quest.checked} logs checked` : "Quest history unavailable";
-    return `<div class="dungeon-quest line"><div><strong>${wowheadQuest(quest)}</strong><small>${activeNames}</small></div><span class="subtle">${completion}</span></div>`;
+    const complete = quest.completedMembers.length;
+    const incomplete = quest.incompleteMembers.length;
+    const unknown = quest.unknownMembers.length;
+    const completion = quest.checked
+      ? `<div class="quest-status-counts"><span class="status-tag status-cleared">${complete} completed</span><span class="status-tag status-partial">${incomplete} not completed</span>${unknown ? `<span class="status-tag">${unknown} untracked</span>` : ""}</div>`
+      : '<span class="status-tag">Quest history unavailable</span>';
+    const characterGroup = (title, list, statusClass) => `<section class="quest-character-group"><strong class="status-tag ${statusClass}">${title} · ${list.length}</strong><p>${list.map(member => memberLink(member, true)).join(", ") || "None"}</p></section>`;
+    const details = quest.checked || unknown ? `<details class="quest-character-status"><summary>View characters</summary><div class="quest-status-groups">
+      ${characterGroup("Completed", quest.completedMembers, "status-cleared")}
+      ${characterGroup("Not completed", quest.incompleteMembers, "status-partial")}
+      ${unknown ? characterGroup("No snapshot", quest.unknownMembers, "") : ""}
+      </div></details>` : "";
+    return `<div class="dungeon-quest line" data-sort-row data-name="${esc(quest.name.toLocaleLowerCase())}" data-id="${quest.id}" data-status="${complete}" data-catalog="${index}">
+      <div class="dungeon-quest-main"><strong>${wowheadQuest(quest)}</strong><small><b>Active:</b> ${activeNames}</small>${completion}${details}</div>
+    </div>`;
   }).join("");
 }
 
-function dungeonCard(row) {
+function dungeonCard(row, priority) {
   const activeLabel = row.active ? `${row.active} active guide quest ${row.active === 1 ? "need" : "needs"}` : "No active guide quests found";
   const demand = row.shared ? `${row.shared} shared quests` : row.inRange ? `${row.inRange} characters in level range` : "";
   const guideLink = row.guide ? `<a class="link" href="${esc(row.guide.guideUrl)}" target="_blank" rel="noopener">Wowhead guide</a>` : "";
-  return `<section class="panel dungeon-plan-card" data-dungeon-card data-dungeon-name="${esc(row.dungeon.name.toLowerCase())}">
-    <div class="panel-heading"><div><h2>${esc(row.dungeon.name)}</h2><p>Levels ${esc(row.dungeon.levels)}${demand ? ` · ${esc(demand)}` : ""} · ${esc(activeLabel)}</p></div></div>
-    <div class="dungeon-card-content"><div class="dungeon-quest-list">${questProgressLines(row)}${guideLink ? `<p class="panel-note">${guideLink}</p>` : ""}</div>
+  const minLevel = Number(row.dungeon.levels.split(/[–-]/)[0]) || 0;
+  return `<details class="panel planner-details dungeon-plan-card" data-dungeon-card data-dungeon-name="${esc(row.dungeon.name.toLowerCase())}" data-sort-row data-name="${esc(row.dungeon.name.toLocaleLowerCase())}" data-priority="${priority}" data-shared="${row.shared}" data-active="${row.active}" data-range="${row.inRange}"${priority === 0 ? " open" : ""}>
+    <summary class="dungeon-card-summary"><span><strong>${esc(row.dungeon.name)}</strong><span class="subtle">Levels ${esc(row.dungeon.levels)}${demand ? ` · ${esc(demand)}` : ""} · ${esc(activeLabel)}</span></span></summary>
+    <div class="dungeon-card-content"><div class="planner-section-tools">${sortSelect(row.dungeon.id, [["catalog:asc", "Guide order"], ["name:asc", "Quest name"], ["status:desc", "Most completed"]], "Sort quests")}</div><div class="dungeon-quest-list" data-sort-list="${esc(row.dungeon.id)}">${questProgressLines(row)}${guideLink ? `<p class="panel-note">${guideLink}</p>` : ""}</div>
     </div>
-  </section>`;
+  </details>`;
 }
 
 function dungeonPlanner(data) {
@@ -156,14 +187,16 @@ function dungeonPlanner(data) {
   const remaining = plan.slice(5);
   const checked = data.checkedAt ? `Armory checked ${timeFormat.format(new Date(data.checkedAt))}` : "Armory quest data is unavailable";
   const introText = available ? `${available} of ${(data.characters ?? []).length} characters have quest snapshots. Quest statuses reflect the latest Armory logs; use Wowhead for guide details.` : "Armory quest logs are unavailable. Dungeon guides and the checklist are still available.";
+  const dungeonSort = [["priority:asc", "Recommended"], ["name:asc", "Dungeon name"], ["shared:desc", "Most shared quests"], ["active:desc", "Most active quests"], ["range:desc", "Most characters in range"]];
+  const recommendedRuns = recommended.map((row, index) => dungeonCard(row, index)).join("") || empty("No dungeons are indexed.");
+  const remainingRuns = remaining.map((row, index) => dungeonCard(row, index + recommended.length)).join("");
+  const controls = `<div class="planner-filter"><label for="dungeon-search">Find a dungeon</label><input id="dungeon-search" type="search" placeholder="Search by dungeon name" data-dungeon-search autocomplete="off">${sortSelect("all-dungeons", dungeonSort)}</div>`;
   return `<div class="dungeon-planner" data-planning>
     <p class="notice" role="status">${esc(introText)}</p>
-    ${panel("Recommended next runs", checked, recommended.map(dungeonCard).join("") || empty("No dungeons are indexed."))}
-    <section class="panel dungeon-index-panel"><div class="panel-heading"><div><h2>All Forever dungeons</h2><p>Search guides and quest progress.</p></div></div>
-      <div class="planner-filter"><label for="dungeon-search">Find a dungeon</label><input id="dungeon-search" type="search" placeholder="Search by dungeon name" data-dungeon-search autocomplete="off"></div>
-      <div class="dungeon-index" data-dungeon-index>${remaining.map(dungeonCard).join("")}</div>
-      <p class="panel-note"><a href="https://www.wowhead.com/forever/guide/dungeons/every-dungeon-quest-location" target="_blank" rel="noopener">Full Wowhead Forever dungeon quest index</a> · Quest references are guide data, not a guarantee of faction or character eligibility.</p>
-    </section>
+    ${collapsibleSection("Recommended next runs", checked, `<div class="dungeon-index" data-sort-list="recommended-dungeons">${recommendedRuns}</div>`, true,
+      `<div class="planner-section-tools">${sortSelect("recommended-dungeons", dungeonSort)}</div>`)}
+    ${collapsibleSection("All Forever dungeons", "Search guides and quest progress.", `<div class="dungeon-index" data-sort-list="all-dungeons">${remainingRuns}</div>
+      <p class="panel-note"><a href="https://www.wowhead.com/forever/guide/dungeons/every-dungeon-quest-location" target="_blank" rel="noopener">Full Wowhead Forever dungeon quest index</a> · Quest references are guide data, not a guarantee of faction or character eligibility.</p>`, false, controls)}
   </div>`;
 }
 
@@ -276,6 +309,7 @@ export function bindPlanning(main, members, onSaved, completed) {
   const completedQuery = root.querySelector("[data-completed-query]");
   if (completedQuery) {
     const target = root.querySelector("[data-completed-results]");
+    const completedSort = root.querySelector('[data-sort-target="completed-quests"]');
     const more = root.querySelector("[data-completed-more]");
     const count = root.querySelector("[data-completed-count]");
     let limit = 40;
@@ -285,6 +319,15 @@ export function bindPlanning(main, members, onSaved, completed) {
       const visible = result.slice(0, limit);
       count.textContent = `Showing ${visible.length} of ${result.length}`;
       target.innerHTML = visible.length ? questList(visible) : empty("No matching quests.");
+      const [field, direction = "asc"] = completedSort.value.split(":");
+      const rows = [...target.querySelectorAll(":scope > [data-sort-row]")];
+      rows.sort((left, right) => {
+        const a = left.dataset[field] ?? "";
+        const b = right.dataset[field] ?? "";
+        const comparison = field === "name" ? a.localeCompare(b) : Number(a) - Number(b);
+        return direction === "desc" ? -comparison : comparison;
+      });
+      target.append(...rows);
       more.innerHTML = result.length > limit ? '<p class="panel-note"><button type="button" class="button quiet" data-more-completed>Show more</button></p>' : "";
     };
     completedQuery.addEventListener("input", () => { limit = 40; update(); target.scrollTop = 0; });

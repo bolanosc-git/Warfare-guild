@@ -299,7 +299,7 @@ h1, h2, h3, p { margin: 0; }
 
 .roster-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(72px, .85fr) minmax(38px, auto);
+  grid-template-columns: 48px minmax(0, 1.55fr) minmax(72px, .85fr);
   align-items: center;
   gap: 10px;
   padding: 9px 19px;
@@ -307,11 +307,22 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .full-roster .roster-row {
-  grid-template-columns: minmax(0, 1.7fr) minmax(80px, .8fr) minmax(95px, .8fr) minmax(48px, .25fr);
+  grid-template-columns: 52px minmax(150px, 1.45fr) minmax(82px, .7fr) minmax(94px, .8fr) minmax(150px, 1.1fr) minmax(90px, auto);
   min-height: 57px;
 }
 
-a.roster-row:hover { background: var(--paper-deep); }
+.roster-entry:hover { background: var(--paper-deep); }
+.roster-row > .level { text-align: left; }
+.roster-row .person { display: flex; min-width: 0; }
+.roster-row .person:hover strong { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.roster-label .sim-cell, .roster-label .sim-action { color: var(--muted); }
+.roster-sim { display: block; min-width: 0; }
+.roster-sim strong { color: var(--accent); font: 700 1.4rem/1 var(--display); white-space: nowrap; }
+.roster-sim small { display: block; overflow-wrap: anywhere; color: var(--muted); font-size: .75rem; line-height: 1.25; }
+.roster-sim-link:hover .roster-sim strong { color: #fff0d3; }
+.run-sim { min-height: 38px; padding: 7px 10px; white-space: nowrap; }
+.roster-sim-summary { margin-bottom: 11px; color: var(--muted); font-size: .9rem; }
+.roster-label > span { white-space: nowrap; }
 
 .roster-label, .full-roster .roster-label {
   min-height: 0;
@@ -409,6 +420,10 @@ select {
 }
 
 .result-count { margin: 0 0 9px; color: var(--muted); font-size: .875rem; }
+
+.compact-sort { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .8rem; font-weight: 700; }
+.compact-sort select { width: auto; min-width: 135px; min-height: 38px; padding-block: 5px; font-size: .8125rem; }
+.panel-heading .compact-sort { flex: none; }
 
 .profile-tabs {
   display: flex;
@@ -519,6 +534,9 @@ select {
 }
 
 .planner-filter input { width: min(100%, 26rem); }
+.planner-filter .compact-sort { justify-self: start; }
+.planner-section-tools { display: flex; justify-content: flex-end; padding: 9px 15px; border-bottom: 1px solid var(--rule-light); background: #1a191c; }
+.planner-section-body { min-width: 0; }
 .planner-filter .subtle { margin: 0; }
 .quest-results { max-height: 315px; overflow: auto; }
 .quest-results:focus-visible { outline-offset: -3px; }
@@ -529,16 +547,27 @@ select {
 .dungeon-planner > .notice { margin-bottom: 18px; }
 .dungeon-plan-card { margin: 0 14px 12px; }
 .dungeon-plan-card:last-child { margin-bottom: 14px; }
-.dungeon-plan-card .panel-heading { align-items: center; }
+.dungeon-plan-card > summary { align-items: center; }
+.dungeon-card-summary { display: flex; align-items: baseline; gap: 6px 12px; padding: 14px 17px; cursor: pointer; }
+.dungeon-card-summary > span { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.dungeon-card-summary strong { font: 700 1.35rem/1.1 var(--display); text-transform: uppercase; }
+.dungeon-card-summary .subtle { margin: 0; text-align: right; }
 .dungeon-card-content { display: grid; grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--rule-light); }
 .dungeon-quest-list { min-width: 0; }
-.dungeon-quest { display: flex; align-items: start; justify-content: space-between; gap: 8px 18px; padding: 10px 15px; }
+.dungeon-quest { display: block; padding: 12px 15px; }
 .dungeon-quest:first-child { border-top: 0; }
-.dungeon-quest > div { min-width: 0; }
+.dungeon-quest-main { min-width: 0; }
 .dungeon-quest strong, .dungeon-quest small { display: block; }
 .dungeon-quest small { margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
 .dungeon-quest a[data-wowhead], .gear-name a[data-wowhead] { color: #f2c788; }
-.dungeon-quest .subtle { flex: none; margin-top: 0; text-align: right; }
+.quest-status-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.quest-character-status { margin-top: 7px; }
+.quest-character-status > summary { width: fit-content; padding: 3px 0; color: var(--accent); font-size: .82rem; cursor: pointer; }
+.quest-status-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 9px 0 2px; }
+.quest-character-group { min-width: 0; padding: 9px; background: var(--paper-deep); }
+.quest-character-group p { margin-top: 5px; color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
+.quest-character-group a { color: var(--ink); text-decoration: underline; text-decoration-color: #8e6858; text-underline-offset: 2px; }
+.dungeon-plan-card .panel-note { margin-top: 5px; }
 .dungeon-index-panel { overflow: hidden; }
 .dungeon-index .dungeon-plan-card { margin-top: 12px; }
 .dungeon-index .dungeon-plan-card:first-child { margin-top: 0; }
@@ -555,19 +584,26 @@ select {
 .tier-grid .tier-disclaimer { grid-column: 1 / -1; }
 [data-dungeon-card][hidden] { display: none; }
 
-.planner-details summary {
+.planner-section > summary, .planner-details summary {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 5px 12px;
   padding: 13px 19px;
+  list-style: none;
+  cursor: pointer;
 }
 
-.planner-details summary:hover, .planner-details[open] summary { background: var(--paper-deep); }
-.planner-details summary::before { content: "+"; width: 1em; color: var(--accent); font-weight: 750; }
-.planner-details[open] summary::before { content: "−"; }
-.planner-details summary > span:first-of-type { margin-right: auto; }
+.planner-section > summary::-webkit-details-marker, .planner-details summary::-webkit-details-marker { display: none; }
+.planner-section > summary:hover, .planner-section[open] > summary, .planner-details summary:hover, .planner-details[open] > summary { background: var(--paper-deep); }
+.planner-section > summary::before, .planner-details summary::before { content: "+"; width: 1em; color: var(--accent); font-weight: 750; }
+.planner-section[open] > summary::before, .planner-details[open] > summary::before { content: "−"; }
+.planner-section > summary > div, .planner-details summary > span:first-of-type { flex: 1; min-width: 0; }
 .planner-details summary > .subtle { margin-top: 0; }
+.planner-section > summary h2 { font: 700 1.55rem/1.1 var(--display); text-transform: uppercase; }
+.planner-section > summary p { margin-top: 4px; }
+.planner-section > summary .section-hint { display: none; }
+.planner-details > summary .section-hint { margin-left: auto; }
 
 .loading { padding-block: 35px; color: var(--muted); }
 .site-footer { border-top: 1px solid var(--rule); color: var(--muted); }
@@ -639,18 +675,23 @@ dialog .form-status:empty { display: none; }
   .dashboard, .profile-grid { grid-template-columns: minmax(0, 1fr); }
   .page-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
   .page-toolbar > label:first-child { grid-column: 1 / -1; }
-  .full-roster .roster-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .full-roster .roster-label > :nth-child(2), .full-roster .rank, .full-roster .class-name { display: none; }
+  .full-roster .roster-row { grid-template-columns: 40px minmax(100px, 1fr) minmax(72px, auto) auto; gap: 6px; padding-inline: 10px; }
+  .full-roster .roster-label > :nth-child(3), .full-roster .rank, .full-roster .class-name { display: none; }
+  .full-roster .roster-sim small { max-width: 130px; }
+  .full-roster .run-sim { min-height: 36px; padding: 6px 8px; font-size: .78rem; }
+  .roster-row { grid-template-columns: 40px minmax(0, 1fr) minmax(60px, auto); gap: 7px; }
+  .roster-row .class-icon { width: 29px; }
+  .roster-row .class-icon .icon { width: 15px; height: 15px; }
   .person .mobile-caption { display: block; }
   .roster-row { padding-inline: 12px; }
   .panel-heading, .detail-row, .sim-row, .atlas-entry, .empty { padding-inline: 14px; }
   .planner-grid .detail-row { flex-wrap: wrap; }
   .planner-grid .detail-row .button { min-height: 44px; }
   .dungeon-plan-card { margin-inline: 9px; }
-  .dungeon-quest { flex-direction: column; }
-  .dungeon-quest .subtle { text-align: left; }
-  .dungeon-plan-card .panel-heading { align-items: flex-start; }
-  .dungeon-plan-card .panel-heading .button { min-width: 92px; }
+  .dungeon-card-summary { padding-inline: 13px; }
+  .dungeon-card-summary > span { display: block; }
+  .dungeon-card-summary .subtle { display: block; margin-top: 4px; text-align: left; }
+  .quest-status-groups { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 430px) {
@@ -664,4 +705,7 @@ dialog .form-status:empty { display: none; }
   .brand strong { font-size: 1.94rem; }
   .brand img { width: 24px; }
   .faction { font-size: .75rem; }
+  .full-roster .roster-row { grid-template-columns: 32px minmax(78px, 1fr) minmax(56px, auto) auto; gap: 4px; padding-inline: 6px; }
+  .full-roster .roster-sim strong { font-size: 1.16rem; }
+  .full-roster .run-sim { padding-inline: 6px; font-size: .7rem; }
 }

@@ -84,44 +84,93 @@ function characterMark(character) {
   return `<span class="class-icon" style="--class:${color}">${icon(symbol)}</span>`;
 }
 
-function rosterRows(members, full = false) {
+function rosterRows(members, full = false, reports = []) {
   if (!members.length) return '<p class="empty">No matching characters.</p>';
-  return `<div class="roster-row roster-label"><span>Character</span><span>Class</span>${full ? '<span class="rank">Rank</span>' : ""}<span class="level">Level</span></div>` +
-    members.map(character => {
-      const [color] = classStyle(character);
-      const rank = character.rank === 0 ? "Guild Master" : Number.isInteger(character.rank) ? `Rank ${character.rank}` : "—";
-      const caption = full ? [character.className, rank === "—" ? character.race : rank].filter(Boolean).join(" · ") :
-        character.rank === 0 ? rank : character.race || "Horde";
-      return `<a class="roster-row line" href="/character/${encodeURIComponent(character.slug)}" data-nav style="--class:${color}">
-        <span class="person">${characterMark(character)}<span><strong>${esc(character.name)}</strong><small${full ? ' class="mobile-caption"' : ""}>${esc(caption)}</small></span></span>
-        <span class="class-name">${esc(character.className)}</span>${full ? `<span class="rank">${rank}</span>` : ""}
-        <span class="level">${esc(character.level ?? "—")}</span></a>`;
-    }).join("");
+  const reportByCharacter = new Map();
+  for (const report of reports) {
+    const previous = reportByCharacter.get(report.characterId);
+    if (!previous || new Date(report.date ?? 0) > new Date(previous.date ?? 0)) reportByCharacter.set(report.characterId, report);
+  }
+  const header = full
+    ? '<div class="roster-row roster-label" role="row"><span class="level" role="columnheader">Level</span><span role="columnheader">Character</span><span class="class-name" role="columnheader">Class</span><span class="rank" role="columnheader">Rank</span><span class="sim-cell" role="columnheader">Latest DPS</span><span class="sim-action" role="columnheader">Action</span></div>'
+    : '<div class="roster-row roster-label"><span class="level">Level</span><span>Character</span><span>Class</span></div>';
+  return header + members.map(character => {
+    const [color] = classStyle(character);
+    const rank = character.rank === 0 ? "Guild Master" : Number.isInteger(character.rank) ? `Rank ${character.rank}` : "—";
+    const caption = full ? [character.className, rank === "—" ? character.race : rank].filter(Boolean).join(" · ") :
+      character.rank === 0 ? rank : character.race || "Horde";
+    const name = `<a class="person" href="/character/${encodeURIComponent(character.slug)}" data-nav style="--class:${color}">${characterMark(character)}<span><strong>${esc(character.name)}</strong><small${full ? ' class="mobile-caption"' : ""}>${esc(caption)}</small></span></a>`;
+    if (!full) return `<div class="roster-row roster-entry line" style="--class:${color}"><span class="level">${esc(character.level ?? "—")}</span>${name}<span class="class-name">${esc(character.className)}</span></div>`;
+    const report = reportByCharacter.get(character.id);
+    const reportUrl = report ? validUrl(report.url, ["mythicsim.com", "www.mythicsim.com"]) : "";
+    const result = report ? `<span class="roster-sim"><strong>${number.format(report.dps)}</strong><small>${esc(report.scenario)} · ${dateLabel(report.date)}</small></span>` : '<span class="roster-sim"><span class="subtle">No sim yet</span></span>';
+    const runSim = `<a class="button quiet run-sim" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener" aria-label="Run MythicSim for ${esc(character.name)}">Run Sim</a>`;
+    const sim = reportUrl ? `<a class="roster-sim-link" href="${reportUrl}" target="_blank" rel="noopener" aria-label="View ${esc(character.name)}’s latest MythicSim result">${result}</a>` : result;
+    return `<div class="roster-row roster-entry line" role="row" data-roster-row data-name="${esc(character.name.toLocaleLowerCase())}" data-class="${esc(character.className.toLocaleLowerCase())}" data-rank="${Number.isInteger(character.rank) ? character.rank : 999}" data-level="${Number(character.level) || 0}" data-dps="${report ? report.dps : -1}" data-sim-date="${report ? new Date(report.date ?? 0).getTime() : 0}">
+      <span class="level" role="cell">${esc(character.level ?? "—")}</span><span role="cell">${name}</span><span class="class-name" role="cell">${esc(character.className)}</span><span class="rank" role="cell">${esc(rank)}</span><span class="sim-cell" role="cell">${sim}</span><span class="sim-action" role="cell">${runSim}</span>
+    </div>`;
+  }).join("");
 }
 
 function simRows(reports, detailed = false) {
   if (!reports.length) return '<p class="empty">No simulation reports yet.</p>';
   const members = new Map(state.members.map(character => [character.id, character]));
-  return `<div class="${detailed ? "report-table" : ""}">` + reports.map(report => {
+  const rows = [...reports].sort((left, right) => new Date(right.date ?? 0) - new Date(left.date ?? 0));
+  return `<div class="${detailed ? "report-table" : ""}"${detailed ? ' data-report-list' : ""}>` + rows.map(report => {
     const member = members.get(report.characterId);
     const character = member
       ? `<a href="/character/${encodeURIComponent(member.slug)}" data-nav>${esc(member.name)}</a>`
       : esc(report.characterName ?? "Former guild member");
     const href = validUrl(report.url, ["mythicsim.com", "www.mythicsim.com", "www.raidbots.com", "raidbots.com", "mimiron.raidbots.com"]);
-    return `<div class="sim-row line">
+    return `<div class="sim-row line"${detailed ? ` data-report-row data-scenario="${esc((report.scenario ?? "").toLocaleLowerCase())}" data-dps="${Number(report.dps) || 0}" data-date="${new Date(report.date ?? 0).getTime()}"` : ""}>
       <div><strong>${character}</strong><p class="subtle">${report.provider ? `${esc(report.provider)} · ` : ""}${esc(report.scenario)} · ${report.dateKind === "imported" ? "Imported " : ""}${dateLabel(report.date)}</p></div>
       <span class="sim-number">${number.format(report.dps)}<small>DPS</small></span>
       ${detailed && href ? `<a class="link" href="${href}" target="_blank" rel="noopener">View report</a>` : ""}</div>`;
   }).join("") + "</div>";
 }
 
-function latestReports(reports) {
-  const ids = new Set();
-  return reports.filter(report => {
-    if (ids.has(report.characterId)) return false;
-    ids.add(report.characterId);
-    return true;
+function bindReportSorting(root) {
+  root.querySelectorAll("[data-report-sort]").forEach(select => select.addEventListener("change", () => {
+    const list = select.closest(".panel")?.querySelector("[data-report-list]");
+    if (!list) return;
+    const field = select.value;
+    const rows = [...list.querySelectorAll("[data-report-row]")];
+    rows.sort((left, right) => {
+      const a = left.dataset[field] ?? "";
+      const b = right.dataset[field] ?? "";
+      return field === "scenario" ? a.localeCompare(b) : Number(b) - Number(a);
+    });
+    list.append(...rows);
+  }));
+}
+
+function bindSortControls(root) {
+  root.querySelectorAll("[data-sort-target]").forEach(select => {
+    const sort = () => {
+      const list = root.querySelector(`[data-sort-list="${select.dataset.sortTarget}"]`);
+      if (!list) return;
+      const [field, direction = "asc"] = select.value.split(":");
+      const rows = [...list.querySelectorAll(":scope > [data-sort-row]")];
+      rows.sort((left, right) => {
+        const a = left.dataset[field] ?? "";
+        const b = right.dataset[field] ?? "";
+        const comparison = field === "name" ? a.localeCompare(b) : Number(a) - Number(b);
+        return direction === "desc" ? -comparison : comparison;
+      });
+      list.append(...rows);
+    };
+    select.addEventListener("change", sort);
+    sort();
   });
+}
+
+function latestReports(reports) {
+  const latest = new Map();
+  for (const report of reports) {
+    const previous = latest.get(report.characterId);
+    if (!previous || new Date(report.date ?? 0) > new Date(previous.date ?? 0)) latest.set(report.characterId, report);
+  }
+  return [...latest.values()].sort((left, right) => new Date(right.date ?? 0) - new Date(left.date ?? 0));
 }
 
 function atlasEntry(symbol, title, description, label, href) {
@@ -131,9 +180,8 @@ function atlasEntry(symbol, title, description, label, href) {
   </a>`;
 }
 
-function overview({ reports, reportError }) {
+function overview() {
   const guildClassCount = new Set(state.members.map(member => member.className)).size;
-  const latest = latestReports(reports).slice(0, 4);
   const guildSize = `${state.members.length} ${state.members.length === 1 ? "character" : "characters"} · ${guildClassCount} ${guildClassCount === 1 ? "class" : "classes"}`;
   return `
     <section class="frame stronghold">
@@ -153,37 +201,61 @@ function overview({ reports, reportError }) {
       ${panel("Guild tools", "", [
         atlasEntry("crosshair", "Dungeon planner", "Use shared quests and levels to choose what to tackle next.", "Open planner", "/dungeon-planner"),
         atlasEntry("users", "Character progress", "Active quests, dungeon clears, and attunements.", "Choose a character", "/roster"),
-        atlasEntry("pulse", "MythicSim reports", "Quick Sim results and sim coverage.", "View simulations", "/simulations"),
         atlasEntry("shield", "Tier 1 readiness", "Track level and sim coverage before the next tier.", "View prep", "/tier-prep")
       ].join(""))}
-      ${reportError || latest.length ? `<div class="dashboard-wide">${panel("Recent DPS sims", "Latest report per character", reportError ? notice(reportError) : simRows(latest), '<a href="/simulations" data-nav class="link">Sim history</a>')}</div>` : ""}
     </div>`;
 }
 
-function roster() {
+function reportDialog() {
+  const options = state.members.map(character => `<option value="${esc(character.slug)}">${esc(character.name)}</option>`).join("");
+  return `<dialog aria-labelledby="import-title"><form data-report-form>
+    <h2 id="import-title" class="section-title">Publish MythicSim result</h2>
+    <p class="subtle">Run Quick Sim in MythicSim, then copy the result page URL from the address bar and enter its displayed DPS. The link and DPS are visible to site visitors.</p>
+    <label>Character <select required name="character"><option value="">Choose a character</option>${options}</select></label>
+    <label>MythicSim result URL <input type="url" name="url" placeholder="https://mythicsim.com/sims/…" maxlength="240" required></label>
+    <label>Simulated DPS <input type="number" name="dps" inputmode="decimal" min="0.01" max="1000000000" step="any" placeholder="DPS shown on the result" required></label>
+    <label>Encounter settings (optional) <input name="scenario" maxlength="100" placeholder="e.g. Single target, 2 minutes"></label>
+    <p class="form-status" role="status"></p>
+    <div class="actions"><button class="button primary" type="submit">Publish result</button><button class="button" type="button" data-report-close>Cancel</button></div>
+  </form></dialog>`;
+}
+
+function roster(reports, reportError) {
   const classes = [...new Set(state.members.map(character => character.className))].sort();
-  const armoryLink = '<a class="button" href="https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/guild/warfare" target="_blank" rel="noopener">View live roster on Blizzard Armory</a>';
-  return intro("Guild roster", "Browse Warfare’s characters, gear, talents, and professions.", { action: armoryLink }) + `
+  const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish sim result</button>' : "";
+  const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener">Run Sim on MythicSim</a>';
+  const armoryLink = '<a class="button quiet" href="https://worldofwarcraft.blizzard.com/en-us/forever/us/armory/guild/warfare" target="_blank" rel="noopener">Blizzard Armory</a>';
+  const coverage = simCoverage(state.members, reports);
+  return intro("Guild roster", "Browse Warfare’s characters, gear, talents, professions, and latest DPS sims.", { action: openSimulator + importButton + armoryLink }) + `
     <div class="frame content">
       ${sourceNote()}
+      ${reportError ? notice(reportError) : ""}${status ? notice(status) : ""}
+      <p class="roster-sim-summary">${coverage.current} of ${coverage.total} characters have a sim from the last 30 days. Each row shows the latest published result.</p>
       <form class="page-toolbar" data-roster-filters>
         <label>Search characters <input type="search" name="search" placeholder="Search by character name" autocomplete="off"></label>
         <label>Class <select name="className"><option value="">All classes</option>${classes.map(name => `<option>${esc(name)}</option>`).join("")}</select></label>
-        <label>Sort by <select name="sort"><option value="rank">Guild rank</option><option value="level">Highest level</option><option value="name">Character name</option></select></label>
+        <label>Sort by <select name="sort"><option value="rank">Guild rank</option><option value="name">Character name</option><option value="class">Class</option><option value="level">Highest level</option><option value="dps">Highest DPS</option><option value="sim">Most recent sim</option></select></label>
       </form>
       <p class="result-count" aria-live="polite"></p>
-      <section class="panel full-roster" data-roster-results aria-label="Characters"></section>
+      <section class="panel full-roster" data-roster-results aria-label="Characters" role="table"></section>
+      ${importButton ? reportDialog() : ""}
     </div>`;
 }
 
-function updateRoster(form) {
+function updateRoster(form, reports) {
   const { search, className, sort } = Object.fromEntries(new FormData(form));
   const query = search.trim().toLocaleLowerCase();
   const members = state.members.filter(character => character.name.toLocaleLowerCase().includes(query) && (!className || character.className === className));
-  if (sort === "name") members.sort((left, right) => left.name.localeCompare(right.name));
-  if (sort === "level") members.sort((left, right) => right.level - left.level || left.name.localeCompare(right.name));
+  const reportMap = new Map(latestReports(reports).map(report => [report.characterId, report]));
+  const compareName = (left, right) => left.name.localeCompare(right.name);
+  if (sort === "name") members.sort(compareName);
+  if (sort === "class") members.sort((left, right) => left.className.localeCompare(right.className) || compareName(left, right));
+  if (sort === "level") members.sort((left, right) => (right.level ?? 0) - (left.level ?? 0) || compareName(left, right));
+  if (sort === "dps") members.sort((left, right) => (reportMap.get(right.id)?.dps ?? -1) - (reportMap.get(left.id)?.dps ?? -1) || compareName(left, right));
+  if (sort === "sim") members.sort((left, right) => new Date(reportMap.get(right.id)?.date ?? 0) - new Date(reportMap.get(left.id)?.date ?? 0) || compareName(left, right));
+  if (sort === "rank") members.sort((left, right) => (left.rank ?? Infinity) - (right.rank ?? Infinity) || compareName(left, right));
   document.querySelector(".result-count").textContent = `${members.length} of ${state.members.length} characters`;
-  document.querySelector("[data-roster-results]").innerHTML = rosterRows(members, true);
+  document.querySelector("[data-roster-results]").innerHTML = rosterRows(members, true, reports);
 }
 
 const empty = message => `<p class="empty">${esc(message)}</p>`;
@@ -226,38 +298,10 @@ function characterPage(character, { reports, reportError }) {
         <div class="profile-stack">
           ${panel("Talents", "", talents)}
           ${panel("Professions", "", professions)}
-          ${panel("DPS history", "", reportError ? notice(reportError) : simRows(history, true))}
+          ${panel("DPS history", "", reportError ? notice(reportError) : simRows(history, true), '<label class="compact-sort"><span>Sort</span><select data-report-sort aria-label="Sort DPS history"><option value="date">Newest</option><option value="dps">Highest DPS</option><option value="scenario">Encounter</option></select></label>')}
         </div>
       </div>
       ${character.updatedAt ? `<p class="subtle">Armory snapshot · ${dateLabel(character.updatedAt)}</p>` : ""}
-    </div>`;
-}
-
-function simulations({ reports, reportError }) {
-  const importButton = state.reportWritable && state.members.length ? '<button class="button primary" data-report-open>Publish MythicSim result</button>' : "";
-  const openSimulator = '<a class="button" href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener">Open MythicSim</a>';
-  const options = state.members.map(character => `<option value="${esc(character.slug)}">${esc(character.name)}</option>`).join("");
-  const coverage = simCoverage(state.members, reports);
-  const unsimmed = coverage.entries.filter(entry => !entry.current);
-  const coverageRows = unsimmed.length ? unsimmed.slice(0, 8).map(({ member, report, date }) => `<div class="detail-row line"><span><a href="/character/${encodeURIComponent(member.slug)}" data-nav><strong>${esc(member.name)}</strong></a><small>${report && date ? `Last sim ${dateLabel(date)}` : "No published sim"}</small></span><a href="https://mythicsim.com/wow-forever/sim" target="_blank" rel="noopener" class="link">Run sim</a></div>`).join("") : '<p class="empty">All characters have a report from the last 30 days.</p>';
-  return intro("DPS simulations", "Simulate your equipped build with Quick Sim or compare items with Best Gear. Share your Quick Sim results with the guild.", { action: importButton + openSimulator }) + `
-    <div class="frame content">
-      ${sourceNote()}
-      ${reportError ? notice(reportError) : ""}
-      ${status ? notice(status) : ""}
-      ${panel("Sim coverage", `${coverage.current} of ${coverage.total} characters have a result from the last 30 days.`, coverageRows, '<a href="/tier-prep" data-nav class="link">Tier prep</a>')}
-      ${panel("Report history", "Newest first · Compare DPS using matching encounter settings", simRows(reports, true) +
-      '<p class="panel-note">Saved DPS summaries remain available if the original result link expires. MythicSim runs the sim; Warfare stores the submitted result.</p>')}
-      ${importButton ? `<dialog aria-labelledby="import-title"><form data-report-form>
-        <h2 id="import-title" class="section-title">Publish MythicSim result</h2>
-        <p class="subtle">Run Quick Sim in MythicSim, then copy the result page URL from the address bar and enter its displayed DPS. The link and DPS are visible to site visitors.</p>
-        <label>Character <select required name="character"><option value="">Choose a character</option>${options}</select></label>
-        <label>MythicSim result URL <input type="url" name="url" placeholder="https://mythicsim.com/sims/…" maxlength="240" required></label>
-        <label>Simulated DPS <input type="number" name="dps" inputmode="decimal" min="0.01" max="1000000000" step="any" placeholder="DPS shown on the result" required></label>
-        <label>Encounter settings (optional) <input name="scenario" maxlength="100" placeholder="e.g. Single target, 2 minutes"></label>
-        <p class="form-status" role="status"></p>
-        <div class="actions"><button class="button primary" type="submit">Publish report</button><button class="button" type="button" data-report-close>Cancel</button></div>
-      </form></dialog>` : ""}
     </div>`;
 }
 
@@ -288,6 +332,7 @@ async function submitReport(event) {
 
 async function render(moveFocus = true) {
   const request = ++renderRequest;
+  if (/^\/simulations\/?$/.test(location.pathname)) history.replaceState({}, "", "/roster");
   const path = location.pathname.replace(/\/$/, "") || "/";
   activeNav(path);
   if (moveFocus) {
@@ -299,15 +344,15 @@ async function render(moveFocus = true) {
     if (!state || Date.now() - lastFetch > 300_000) await loadGuild();
     let result, title;
     let completed = [];
+    let currentReports = [];
     if (path === "/") {
-      result = overview(await loadReports());
+      result = overview();
       title = "Warfare";
     } else if (path === "/roster") {
-      result = roster();
+      const reportData = await loadReports();
+      currentReports = reportData.reports;
+      result = roster(reportData.reports, reportData.reportError);
       title = "Guild Roster | Warfare";
-    } else if (path === "/simulations") {
-      result = simulations(await loadReports());
-      title = "DPS Simulations | Warfare";
     } else if (path === "/dungeon-planner" || /^\/character\/[^/]+\/progress$/.test(path)) {
       const view = path === "/dungeon-planner" ? "planner" : "character";
       const slug = view === "character" ? decodeURIComponent(path.split("/")[2]) : null;
@@ -341,10 +386,12 @@ async function render(moveFocus = true) {
     requestAnimationFrame(() => globalThis.WH?.Tooltips?.refreshLinks?.(true));
     const filters = main.querySelector("[data-roster-filters]");
     if (filters) {
-      filters.addEventListener("input", () => updateRoster(filters));
+      filters.addEventListener("input", () => updateRoster(filters, currentReports));
       filters.addEventListener("submit", event => event.preventDefault());
-      updateRoster(filters);
+      updateRoster(filters, currentReports);
     }
+    bindSortControls(main);
+    bindReportSorting(main);
     if (main.querySelector("[data-planning]")) bindPlanning(main, state.members, message => {
       if (request !== renderRequest) return;
       status = message;
