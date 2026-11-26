@@ -33,7 +33,7 @@
 
 * { box-sizing: border-box; }
 
-html { overflow-x: clip; }
+html { overflow-x: hidden; }
 
 body {
   margin: 0;
