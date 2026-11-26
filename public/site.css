@@ -566,6 +566,12 @@ select {
 .planner-scroll { max-height: 550px; overflow: auto; }
 .planner-details + .planner-details { border-top: 1px solid var(--rule-light); }
 
+.dungeon-planner {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 .dungeon-planner, .dungeon-planner > .panel { margin-bottom: 18px; }
 .dungeon-planner > .notice { margin-bottom: 18px; }
 
@@ -586,7 +592,12 @@ select {
 .matrix-unknown { background: #27262b; color: var(--muted); }
 
 .matrix-scroll {
-  overflow: auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-x: contain;
   max-block-size: min(62vh, 34rem);
   border-block-start: 1px solid var(--rule);
   scroll-padding-inline-start: clamp(8rem, 30vw, 13rem);
