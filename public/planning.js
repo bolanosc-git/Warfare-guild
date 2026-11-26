@@ -170,6 +170,64 @@ export function buildDungeonPlan(data) {
   }));
 }
 
+function matrixHeader(label, key, direction, attributes = "") {
+  return `<th scope="col" ${attributes}><button type="button" class="sort-column"
+    data-sort-column="dungeon-matrix" data-sort-key="${key}" data-sort-direction="${direction}">${esc(label)}<span class="sort-indicator" aria-hidden="true"></span></button></th>`;
+}
+
+function dungeonMatrix(characters, plan) {
+  const title = "Dungeon quest completion matrix";
+  if (!characters.length) return collapsibleSection(title, "", empty("No characters on the roster."));
+
+  const planById = new Map(plan.map(row => [row.dungeon.id, row]));
+  const columns = dungeons.map(dungeon => ({
+    ...dungeon,
+    questIds: [...new Set(planById.get(dungeon.id).quests.map(quest => quest.id))]
+  }));
+  const headings = columns.map(({ id, name }) =>
+    matrixHeader(name, id, "desc", `data-matrix-dungeon="${id}" data-dungeon-name="${esc(name.toLowerCase())}"`)).join("");
+
+  const rows = characters.map(character => {
+    const history = character.completedAvailable && Array.isArray(character.completedQuestIds)
+      ? new Set(character.completedQuestIds) : null;
+    const sortKeys = { name: character.name };
+    const cells = columns.map(({ id, questIds }) => {
+      const total = questIds.length;
+      const count = total && history ? questIds.filter(questId => history.has(questId)).length : null;
+      sortKeys[id] = count;
+      const status = count === total ? "complete" : count === null ? "unknown" : "incomplete";
+      const label = !total ? "No quests indexed" : count === null ? "No Armory completion history"
+        : `${count} of ${total} indexed quests complete`;
+      const value = !total ? "No index" : count === null ? "No history"
+        : `${status === "complete" ? "✓" : "×"} ${count}/${total}`;
+      return `<td class="matrix-${status}" data-matrix-dungeon="${id}" title="${esc(label)}">
+        <span aria-hidden="true">${value}</span><span class="matrix-visually-hidden">${esc(label)}</span></td>`;
+    }).join("");
+    return `<tr ${sortData(sortKeys)}><th scope="row">${memberLink(character, true)}${character.level == null ? "" : `<small>Level ${esc(character.level)}</small>`}</th>${cells}</tr>`;
+  }).join("");
+
+  const tools = `<div class="matrix-toolbar">
+    <label for="matrix-dungeon-search">Filter dungeon columns
+      <input id="matrix-dungeon-search" type="search" placeholder="Dungeon or wing name" autocomplete="off" data-matrix-search>
+    </label>
+    <ul class="matrix-legend" aria-label="Completion key">
+      <li class="matrix-complete"><span aria-hidden="true">✓</span> All complete</li>
+      <li class="matrix-incomplete"><span aria-hidden="true">×</span> Incomplete</li>
+      <li class="matrix-unknown"><span aria-hidden="true">—</span> No history or quest index</li>
+    </ul>
+  </div>`;
+  const body = `<div class="matrix-scroll" data-matrix-scroll role="region" tabindex="0" aria-label="Scrollable dungeon quest matrix">
+    <table class="dungeon-matrix">
+      <caption class="matrix-visually-hidden">Indexed dungeon quest completion by guild character</caption>
+      <thead><tr>${matrixHeader("Character", "name", "asc")}${headings}</tr></thead>
+      <tbody data-sort-list="dungeon-matrix" data-sort-default="name:asc">${rows}</tbody>
+    </table>
+  </div>
+  <p class="empty" data-matrix-empty role="status" hidden>No matching dungeons.</p>
+  <p class="panel-note">Counts use the Planner’s quest index and the Armory’s completed quest history. Quest availability can depend on faction and prerequisites.</p>`;
+  return collapsibleSection(title, "Scroll to compare dungeons and select a column heading to sort.", body, true, tools);
+}
+
 function questProgressLines(row) {
   if (!row.quests.length) return row.guide
     ? empty("This guide has no quest references in the current index.")
@@ -263,6 +321,7 @@ function dungeonPlanner(data) {
   const controls = `<div class="planner-filter"><label for="dungeon-search">Find a dungeon</label><input id="dungeon-search" type="search" placeholder="Search by dungeon name" data-dungeon-search autocomplete="off">${sortSelect("all-dungeons", dungeonSort, "all dungeons")}</div>`;
   return `<div class="dungeon-planner" data-planning>
     <p class="notice" role="status">${esc(introText)}</p>
+    ${dungeonMatrix(characters, plan)}
     ${characterQuestSection(characters, plan)}
     ${collapsibleSection("Recommended next runs", checked, `<div class="dungeon-index" data-sort-list="recommended-dungeons">${recommendedRuns}</div>`, true,
       `<div class="planner-section-tools">${sortSelect("recommended-dungeons", dungeonSort, "recommended dungeons")}</div>`)}
@@ -372,6 +431,24 @@ export function bindPlanning(main, members, onSaved, completed) {
     const button = event.target.closest("[data-planning-action]");
     if (button) openPlanningDialog(dialog, JSON.parse(button.dataset.planningAction), members, onSaved);
   });
+  const matrixSearch = root.querySelector("[data-matrix-search]");
+  if (matrixSearch) {
+    const viewport = root.querySelector("[data-matrix-scroll]");
+    const headings = [...viewport.querySelectorAll("thead [data-matrix-dungeon]")];
+    const cells = [...viewport.querySelectorAll("[data-matrix-dungeon]")];
+    const noMatches = root.querySelector("[data-matrix-empty]");
+    const filter = () => {
+      const query = matrixSearch.value.trim().toLowerCase();
+      const matching = new Set(headings.filter(cell => cell.dataset.dungeonName.includes(query))
+        .map(cell => cell.dataset.matrixDungeon));
+      for (const cell of cells) cell.hidden = !matching.has(cell.dataset.matrixDungeon);
+      viewport.hidden = !matching.size;
+      noMatches.hidden = Boolean(matching.size);
+      viewport.scrollLeft = 0;
+    };
+    matrixSearch.addEventListener("input", filter);
+    if (matrixSearch.value) filter();
+  }
   root.querySelector("[data-dungeon-search]")?.addEventListener("input", event => {
     const query = event.currentTarget.value.trim().toLowerCase();
     let matches = 0;

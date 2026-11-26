@@ -69,7 +69,7 @@ export function bindSorting(root) {
       list.append(...[...rows].sort((a, b) => sortCompare(order, a.values, b.values)).map(entry => entry.row));
       const [key, direction] = order.split(":");
       for (const button of headings) {
-        const header = button.closest('[role="columnheader"]');
+        const header = button.closest('th[scope="col"], [role="columnheader"]');
         if (button.dataset.sortKey === key) {
           header.setAttribute("aria-sort", direction === "desc" ? "descending" : "ascending");
         } else {
