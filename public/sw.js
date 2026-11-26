@@ -1,4 +1,4 @@
-const cacheName = "warfare-field-guide-v8";
+const cacheName = "warfare-field-guide-v9";
 const shell = [
   "/", "/index.html", "/site.css", "/app.js", "/planning.js", "/progress-catalog.js",
   "/dungeon-quests.js", "/sim-reports.js", "/offline.js", "/ui.js", "/demo.js",

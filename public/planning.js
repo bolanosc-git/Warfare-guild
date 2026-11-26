@@ -186,11 +186,13 @@ function dungeonMatrix(characters, plan) {
   }));
   const headings = columns.map(({ id, name }) =>
     matrixHeader(name, id, "desc", `data-matrix-dungeon="${id}" data-dungeon-name="${esc(name.toLowerCase())}"`)).join("");
+  const allQuestIds = [...new Set(columns.flatMap(({ questIds }) => questIds))];
 
   const rows = characters.map(character => {
     const history = character.completedAvailable && Array.isArray(character.completedQuestIds)
       ? new Set(character.completedQuestIds) : null;
-    const sortKeys = { name: character.name };
+    const completion = history ? allQuestIds.filter(questId => history.has(questId)).length : -1;
+    const sortKeys = { name: character.name, completion };
     const cells = columns.map(({ id, questIds }) => {
       const total = questIds.length;
       const count = total && history ? questIds.filter(questId => history.has(questId)).length : null;
@@ -220,7 +222,7 @@ function dungeonMatrix(characters, plan) {
     <table class="dungeon-matrix">
       <caption class="matrix-visually-hidden">Indexed dungeon quest completion by guild character</caption>
       <thead><tr>${matrixHeader("Character", "name", "asc")}${headings}</tr></thead>
-      <tbody data-sort-list="dungeon-matrix" data-sort-default="name:asc">${rows}</tbody>
+      <tbody data-sort-list="dungeon-matrix" data-sort-default="completion:desc">${rows}</tbody>
     </table>
   </div>
   <p class="empty" data-matrix-empty role="status" hidden>No matching dungeons.</p>
