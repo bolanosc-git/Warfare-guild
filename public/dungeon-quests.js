@@ -1,6 +1,27 @@
 // Quest IDs and names are sourced from Wowhead's Forever dungeon guides.
 // Guides may be revised; link through to Wowhead for the latest quest requirements.
-export const dungeonQuestCatalog = [
+// Alliance-only IDs from Forever quest race masks. Unrestricted and unclassified IDs remain available.
+const allianceOnlyQuestIds = new Set([
+  17, 65, 166, 167, 168, 203, 204, 205, 214, 261,
+  275, 276, 277, 303, 373, 377, 378, 386, 387, 388,
+  391, 463, 484, 704, 707, 720, 722, 723, 724, 725,
+  726, 738, 739, 762, 971, 1050, 1052, 1053, 1100, 1101,
+  1139, 1142, 1199, 1200, 1275, 1360, 1448, 1449, 1450, 1451,
+  1452, 1469, 1475, 1654, 1701, 2040, 2198, 2199, 2200, 2201,
+  2204, 2240, 2398, 2439, 2500, 2501, 2922, 2924, 2926, 2928,
+  2929, 2930, 2947, 2948, 2962, 2988, 2991, 2994, 3445, 3636,
+  3701, 3702, 3765, 4126, 4128, 4141, 4142, 4143, 4182, 4241,
+  4262, 4263, 4282, 4286, 4322, 4341, 4342, 4361, 4362, 4363,
+  4701, 4764, 4765, 4766, 5001, 5002, 5066, 5081, 5089, 5092,
+  5097, 5102, 5343, 5505, 5533, 5537, 5538, 5801, 5803, 6141,
+  6502, 7041, 7065, 7070, 7462, 7482, 7488, 8922, 92344, 92415,
+  92432, 92456, 92457, 92458, 92489, 92742, 92753, 95189, 95194, 95195,
+  95250, 95262, 95263, 95264, 95646, 95647, 95737, 95772, 95787, 95788,
+  95798, 95799, 95809, 95810, 96381, 96391, 96393, 96394, 96403, 96772,
+  96773, 96800, 97130, 97173, 98423, 98815, 98824
+]);
+
+const rawDungeonQuestCatalog = [
   {
     "dungeonId": "hall-of-thanes",
     "guideId": 34887,
@@ -2482,6 +2503,11 @@ export const dungeonQuestCatalog = [
     ]
   }
 ];
+
+export const dungeonQuestCatalog = rawDungeonQuestCatalog.map(dungeon => ({
+  ...dungeon,
+  quests: dungeon.quests.filter(quest => !allianceOnlyQuestIds.has(quest.id))
+}));
 
 export const dungeonQuestById = new Map(dungeonQuestCatalog.map(entry => [entry.dungeonId, entry]));
 export const questGuideUrl = "https://www.wowhead.com/forever/guide/dungeons/every-dungeon-quest-location";
