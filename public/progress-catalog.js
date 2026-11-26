@@ -1,10 +1,11 @@
-// Launch dungeon names and Horde unlock chains are cross-checked against
+// Horde dungeon names and unlock chains are cross-checked against
 // Blizzard's Forever dungeon guide and the sources linked from the Progress page.
+// Alliance-only dungeons are excluded from the shared Horde catalog.
 export const dungeons = [
   ["hall-of-thanes", "Hall of Thanes", "13–18"], ["ragefire-chasm", "Ragefire Chasm", "13–18"],
   ["ruins-of-lordaeron", "Ruins of Lordaeron", "15–20"], ["wailing-caverns", "Wailing Caverns", "15–25"],
-  ["deadmines", "The Deadmines", "18–23"], ["shadowfang-keep", "Shadowfang Keep", "22–30"],
-  ["stockade", "The Stockade", "22–30"], ["excavation-site", "Excavation Site", "24–29"],
+  ["shadowfang-keep", "Shadowfang Keep", "22–30"],
+  ["excavation-site", "Excavation Site", "24–29"],
   ["blackfathom-deeps", "Blackfathom Deeps", "24–32"], ["city-of-dalaran", "City of Dalaran", "28–33"],
   ["scarlet-graveyard", "Scarlet Monastery: Graveyard", "28–45"], ["scarlet-library", "Scarlet Monastery: Library", "28–45"],
   ["scarlet-armory", "Scarlet Monastery: Armory", "28–45"], ["scarlet-cathedral", "Scarlet Monastery: Cathedral", "28–45"],
