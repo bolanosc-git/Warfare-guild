@@ -562,6 +562,41 @@ select {
 .planner-filter .compact-sort { justify-self: start; }
 .planner-section-tools { display: flex; justify-content: flex-end; padding: 9px 15px; border-bottom: 1px solid var(--rule-light); background: #1a191c; }
 .planner-section-body { min-width: 0; }
+.task-list-selector {
+  padding: 12px 19px;
+  border-bottom: 1px solid var(--rule-light);
+  background: var(--paper-deep);
+}
+.task-list-selector label {
+  display: grid;
+  width: min(100%, 28rem);
+  gap: 5px;
+  font-size: .875rem;
+  font-weight: 700;
+}
+.task-list-selector select { width: 100%; }
+.task-list-results { padding: 15px 19px; }
+.task-list-result[hidden] { display: none; }
+.task-list-result h3 { margin: 0 0 9px; }
+.task-list-result .panel-note { margin-block: 6px; }
+.task-list-steps {
+  display: grid;
+  gap: 8px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.task-list-steps li {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+}
+.task-list-steps a { overflow-wrap: anywhere; }
 .planner-filter .subtle { margin: 0; }
 .quest-results { max-height: 315px; overflow: auto; }
 .quest-results:focus-visible { outline-offset: -3px; }
