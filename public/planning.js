@@ -304,6 +304,81 @@ function characterQuestSection(characters, plan) {
     characters.length ? `<div class="planner-section-tools">${sortSelect("character-quests", order, "characters by active dungeon quests")}</div>` : "");
 }
 
+function personalizedTaskResult(character, plan) {
+  const completedIds = new Set(character.completedQuestIds ?? []);
+  const activeIds = new Set(character.activeQuestIds ?? []);
+  const hasCompletion = Boolean(character.completedAvailable);
+  const hasActive = Boolean(character.activeAvailable);
+  const level = character.level == null || character.level === "" ? null : Number.isFinite(Number(character.level)) ? Number(character.level) : null;
+  const recommendations = plan.map((row, index) => {
+    const quests = row.quests.filter(quest => !hasCompletion || !completedIds.has(quest.id));
+    if (!quests.length) return null;
+    const activeCount = quests.filter(quest => activeIds.has(quest.id)).length;
+    const sharedActive = quests.filter(quest => (quest.active ?? []).some(member => member.id !== character.id)).length;
+    const [minLevel, maxLevel] = row.dungeon.levels.split(/[–-]/).map(Number);
+    const inRange = level !== null && level >= minLevel && level <= maxLevel;
+    const levelDistance = level === null ? Number.POSITIVE_INFINITY
+      : level < minLevel ? minLevel - level : level > maxLevel ? level - maxLevel : 0;
+    return { row, quests, activeCount, sharedActive, inRange, levelDistance, index, minLevel };
+  }).filter(Boolean).sort((left, right) =>
+    right.activeCount - left.activeCount ||
+    right.sharedActive - left.sharedActive ||
+    Number(right.inRange) - Number(left.inRange) ||
+    left.levelDistance - right.levelDistance ||
+    left.quests.length - right.quests.length ||
+    left.index - right.index
+  );
+  if (!recommendations.length) {
+    const message = hasCompletion
+      ? "All indexed Horde dungeon quests are complete for this character."
+      : "No dungeon quest recommendations are available from the current roster data.";
+    return `<div class="task-list-result" data-personalized-task-list-for="${esc(character.id ?? character.slug)}" hidden><p class="empty">${esc(message)}</p></div>`;
+  }
+  const recommendation = recommendations[0];
+  const { row, quests } = recommendation;
+  const reasons = [];
+  if (recommendation.activeCount) reasons.push(`${recommendation.activeCount} quest${recommendation.activeCount === 1 ? "" : "s"} already active`);
+  if (recommendation.sharedActive) reasons.push(`${recommendation.sharedActive} quest${recommendation.sharedActive === 1 ? "" : "s"} also active for guild members`);
+  if (recommendation.inRange) reasons.push(`level ${level} is in the suggested range`);
+  const reasonText = reasons.length ? reasons.join(" · ") : `Closest level match for level ${level ?? "unknown"}`;
+  const guidance = hasCompletion
+    ? hasActive
+      ? "The list shows unfinished quests from the character’s Armory history. Pick up quests that are not active yet."
+      : "Completion history is available, but the active quest log is not; verify each quest before picking it up."
+    : "Completion history is unavailable, so check each quest before picking it up.";
+  const tasks = quests.map(quest => {
+    const active = activeIds.has(quest.id);
+    const action = active ? "Continue" : hasCompletion && hasActive ? "Pick up" : "Check status";
+    const statusClass = active ? "status-cleared" : "status-partial";
+    return `<li><span class="status-tag ${statusClass}">${action}</span>${wowheadQuest(quest)}</li>`;
+  }).join("");
+  const guide = row.guide?.guideUrl
+    ? `<a class="link" href="${esc(row.guide.guideUrl)}" target="_blank" rel="noopener">Dungeon guide</a>`
+    : "";
+  return `<div class="task-list-result" data-personalized-task-list-for="${esc(character.id ?? character.slug)}" hidden>
+    <h3>Recommended next dungeon: ${esc(row.dungeon.name)}</h3>
+    <p class="panel-note">${esc(reasonText)} · ${quests.length} unfinished ${quests.length === 1 ? "quest" : "quests"}.</p>
+    <p class="panel-note">${esc(guidance)} ${guide}</p>
+    <ul class="task-list-steps">${tasks}</ul>
+  </div>`;
+}
+
+function personalizedTaskListSection(characters, plan) {
+  const roster = [...characters].sort((left, right) => String(left.name).localeCompare(String(right.name)));
+  const options = roster.map(character =>
+    `<option value="${esc(character.id ?? character.slug)}">${esc(character.name)}${character.level != null ? ` · Level ${esc(character.level)}` : ""}</option>`
+  ).join("");
+  const results = roster.map(character => personalizedTaskResult(character, plan)).join("");
+  const inner = `<div class="task-list-selector">
+      <label for="planner-task-character">Select a character from the guild roster</label>
+      <select id="planner-task-character" data-task-list-character>
+        <option value="">Choose a character</option>${options}
+      </select>
+    </div>
+    <div class="task-list-results" aria-live="polite">${results}</div>`;
+  return collapsibleSection("Personalized Task List", "Open this section, then choose a character to see dungeon preparation tasks.", inner);
+}
+
 function dungeonPlanner(data) {
   const plan = buildDungeonPlan(data);
   const characters = data.characters ?? [];
@@ -324,6 +399,7 @@ function dungeonPlanner(data) {
   return `<div class="dungeon-planner" data-planning>
     <p class="notice" role="status">${esc(introText)}</p>
     ${dungeonMatrix(characters, plan)}
+    ${personalizedTaskListSection(characters, plan)}
     ${characterQuestSection(characters, plan)}
     ${collapsibleSection("Recommended next runs", checked, `<div class="dungeon-index" data-sort-list="recommended-dungeons">${recommendedRuns}</div>`, true,
       `<div class="planner-section-tools">${sortSelect("recommended-dungeons", dungeonSort, "recommended dungeons")}</div>`)}
@@ -433,6 +509,16 @@ export function bindPlanning(main, members, onSaved, completed) {
     const button = event.target.closest("[data-planning-action]");
     if (button) openPlanningDialog(dialog, JSON.parse(button.dataset.planningAction), members, onSaved);
   });
+  const taskCharacter = root.querySelector("[data-task-list-character]");
+  if (taskCharacter) {
+    const taskLists = [...root.querySelectorAll("[data-personalized-task-list-for]")];
+    taskCharacter.addEventListener("change", event => {
+      const selectedCharacter = event.currentTarget.value;
+      for (const taskList of taskLists) {
+        taskList.hidden = taskList.dataset.personalizedTaskListFor !== selectedCharacter;
+      }
+    });
+  }
   const matrixSearch = root.querySelector("[data-matrix-search]");
   if (matrixSearch) {
     const viewport = root.querySelector("[data-matrix-scroll]");
