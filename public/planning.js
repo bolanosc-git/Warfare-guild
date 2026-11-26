@@ -357,7 +357,7 @@ function personalizedTaskResult(character, plan) {
     : "";
   return `<div class="task-list-result" data-personalized-task-list-for="${esc(character.id ?? character.slug)}" hidden>
     <h3>Recommended next dungeon: ${esc(row.dungeon.name)}</h3>
-    <p class="panel-note">${esc(reasonText)} · ${quests.length} unfinished ${quests.length === 1 ? "quest" : "quests"}.</p>
+    <p class="panel-note">${esc(reasonText)} · ${quests.length} ${hasCompletion ? "unfinished " : ""}${quests.length === 1 ? "quest" : "quests"}${hasCompletion ? "" : " to review"}.</p>
     <p class="panel-note">${esc(guidance)} ${guide}</p>
     <ul class="task-list-steps">${tasks}</ul>
   </div>`;
