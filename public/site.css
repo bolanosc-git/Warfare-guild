@@ -232,14 +232,14 @@ h1, h2, h3, p { margin: 0; }
 
 .content { padding-block: 20px 40px; }
 
-.dashboard, .profile-grid, .quest-grid, .planner-grid, .group-grid {
+.dashboard, .profile-grid, .quest-grid, .planner-grid {
   display: grid;
   align-items: start;
   gap: 18px;
 }
 
 .dashboard { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); }
-.dashboard > .notice, .dashboard-wide, .group-grid > .notice { grid-column: 1 / -1; }
+.dashboard > .notice, .dashboard-wide { grid-column: 1 / -1; }
 
 .panel {
   min-width: 0;
@@ -491,7 +491,6 @@ select {
 .panel .notice { margin: 14px 18px; }
 
 .quest-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
-.group-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .planner-row-title { min-width: 0; overflow-wrap: anywhere; }
 .planner-row-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
 .planner-row-title small { margin-top: 2px; }
@@ -531,7 +530,7 @@ select {
 .dungeon-plan-card { margin: 0 14px 12px; }
 .dungeon-plan-card:last-child { margin-bottom: 14px; }
 .dungeon-plan-card .panel-heading { align-items: center; }
-.dungeon-card-content { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(200px, .75fr); border-top: 1px solid var(--rule-light); }
+.dungeon-card-content { display: grid; grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--rule-light); }
 .dungeon-quest-list { min-width: 0; }
 .dungeon-quest { display: flex; align-items: start; justify-content: space-between; gap: 8px 18px; padding: 10px 15px; }
 .dungeon-quest:first-child { border-top: 0; }
@@ -540,10 +539,6 @@ select {
 .dungeon-quest small { margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
 .dungeon-quest a[data-wowhead], .gear-name a[data-wowhead] { color: #f2c788; }
 .dungeon-quest .subtle { flex: none; margin-top: 0; text-align: right; }
-.dungeon-party { padding: 14px; border-left: 1px solid var(--rule-light); background: #19181b; }
-.dungeon-party > strong { color: var(--accent); }
-.dungeon-party p { margin: 6px 0 10px; color: var(--muted); font-size: .875rem; overflow-wrap: anywhere; }
-.dungeon-party .button { margin: 4px 5px 0 0; }
 .dungeon-index-panel { overflow: hidden; }
 .dungeon-index .dungeon-plan-card { margin-top: 12px; }
 .dungeon-index .dungeon-plan-card:first-child { margin-top: 0; }
@@ -641,9 +636,7 @@ dialog .form-status:empty { display: none; }
   .page-intro { margin-top: 16px; }
   .page-intro::before { inset-inline-start: 30%; opacity: .32; }
   .intro-description { font-size: 1rem; }
-  .dashboard, .profile-grid, .group-grid { grid-template-columns: minmax(0, 1fr); }
-  .dungeon-card-content { grid-template-columns: minmax(0, 1fr); }
-  .dungeon-party { border-left: 0; border-top: 1px solid var(--rule-light); }
+  .dashboard, .profile-grid { grid-template-columns: minmax(0, 1fr); }
   .page-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
   .page-toolbar > label:first-child { grid-column: 1 / -1; }
   .full-roster .roster-row { grid-template-columns: minmax(0, 1fr) auto; }

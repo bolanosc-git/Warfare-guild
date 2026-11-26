@@ -140,9 +140,9 @@ function overview({ reports, reportError }) {
       <div class="hero-content">
         <p class="eyebrow">World of Warcraft: Forever</p>
         <h1>Warfare</h1>
-        <p class="intro-description">Find your next dungeon group, check your build, and follow the progress of Warfare’s Horde roster.</p>
+        <p class="intro-description">Choose your next dungeon, review character builds, and follow the progress of Warfare’s Horde roster.</p>
         <div class="actions">
-          <a class="button primary" href="/group-up" data-nav>Find guildmates</a>
+          <a class="button primary" href="/dungeon-planner" data-nav>Plan next dungeon</a>
           <a class="button" href="/roster" data-nav>Browse roster</a>
         </div>
       </div>
@@ -150,9 +150,8 @@ function overview({ reports, reportError }) {
     <div class="frame content dashboard">
       ${sourceNote()}
       ${panel("Guild roster", guildSize, rosterRows(state.members.slice(0, 4)), '<a href="/roster" data-nav class="link">Full roster</a>')}
-      ${panel("Guild planning", "", [
-        atlasEntry("swords", "Shared quests &amp; dungeons", "See who needs the same run.", "Group Up", "/group-up"),
-        atlasEntry("crosshair", "Dungeon planner", "Rank runs by shared quests and sign up by role.", "Plan a run", "/dungeon-planner"),
+      ${panel("Guild tools", "", [
+        atlasEntry("crosshair", "Dungeon planner", "Use shared quests and levels to choose what to tackle next.", "Open planner", "/dungeon-planner"),
         atlasEntry("users", "Character progress", "Active quests, dungeon clears, and attunements.", "Choose a character", "/roster"),
         atlasEntry("pulse", "MythicSim reports", "Quick Sim results and sim coverage.", "View simulations", "/simulations"),
         atlasEntry("shield", "Tier 1 readiness", "Track level and sim coverage before the next tier.", "View prep", "/tier-prep")
@@ -309,13 +308,13 @@ async function render(moveFocus = true) {
     } else if (path === "/simulations") {
       result = simulations(await loadReports());
       title = "DPS Simulations | Warfare";
-    } else if (path === "/group-up" || path === "/dungeon-planner" || /^\/character\/[^/]+\/progress$/.test(path)) {
-      const view = path === "/group-up" ? "group" : path === "/dungeon-planner" ? "planner" : "character";
+    } else if (path === "/dungeon-planner" || /^\/character\/[^/]+\/progress$/.test(path)) {
+      const view = path === "/dungeon-planner" ? "planner" : "character";
       const slug = view === "character" ? decodeURIComponent(path.split("/")[2]) : null;
       const character = slug ? state.members.find(member => member.slug === slug) : null;
       const query = view === "character" ? `character&slug=${encodeURIComponent(slug)}` : view;
       const data = slug && !character ? {} : await get(`/api/planning?view=${query}`) ?? {};
-      ({ result, title, completed } = planningPage(view, data, state.members, character, status));
+      ({ result, title, completed } = planningPage(view, data, character, status));
     } else if (path === "/tier-prep") {
       const { reports, reportError } = await loadReports();
       result = tierPrepPage(state.members, reports);
@@ -346,7 +345,7 @@ async function render(moveFocus = true) {
       filters.addEventListener("submit", event => event.preventDefault());
       updateRoster(filters);
     }
-    if (main.querySelector("[data-planning]")) bindPlanning(main, state.members, get, message => {
+    if (main.querySelector("[data-planning]")) bindPlanning(main, state.members, message => {
       if (request !== renderRequest) return;
       status = message;
       render(false);

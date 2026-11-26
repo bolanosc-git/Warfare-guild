@@ -1,10 +1,11 @@
 const queueKey = "warfare-offline-mutations-v1";
+const retiredActions = new Set(["need", "signup"]);
 let flushing;
 
 function readQueue() {
   try {
     const value = JSON.parse(localStorage.getItem(queueKey) ?? "[]");
-    return Array.isArray(value) ? value : [];
+    return Array.isArray(value) ? value.filter(entry => !retiredActions.has(entry.body?.action)) : [];
   } catch {
     return [];
   }

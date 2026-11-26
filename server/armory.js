@@ -266,24 +266,3 @@ export async function getCharacterProgress(member) {
     checkedAt: new Date().toISOString()
   };
 }
-
-export async function getQuestMatches() {
-  const { members } = await getGuild();
-  const eligible = members.filter(member => member.level >= 10);
-  const matches = new Map();
-  let checked = 0;
-  for (let index = 0; index < eligible.length; index += 8) {
-    const batch = eligible.slice(index, index + 8);
-    const logs = await Promise.all(batch.map(activeQuestLog));
-    logs.forEach((log, memberIndex) => {
-      if (!log.available) return;
-      checked++;
-      for (const quest of log.quests) {
-        if (!matches.has(quest.id)) matches.set(quest.id, { ...quest, characters: [] });
-        const characters = matches.get(quest.id).characters;
-        if (!characters.includes(batch[memberIndex].id)) characters.push(batch[memberIndex].id);
-      }
-    });
-  }
-  return { checked, matches: [...matches.values()].filter(quest => quest.characters.length > 1).sort((a, b) => b.characters.length - a.characters.length || a.name.localeCompare(b.name)) };
-}
