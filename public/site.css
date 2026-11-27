@@ -627,6 +627,7 @@ select {
 .matrix-complete { background: #253d30; color: #d2edc5; }
 .matrix-incomplete { background: #49272b; color: #ffc6be; }
 .matrix-unknown { background: #27262b; color: var(--muted); }
+.matrix-not-applicable { background: #302d31; color: var(--muted); }
 
 .matrix-scroll {
   width: 100%;

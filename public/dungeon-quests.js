@@ -2515,6 +2515,23 @@ export const dungeonQuestCatalog = rawDungeonQuestCatalog
   }));
 
 // Curated Forever quest chains. Steps may include prerequisite quests outside the dungeon index.
+// Class-only dungeon quests are restricted to the named character class.
+const questClassRestrictions = new Map([
+  [1740, "Warlock"], [95036, "Paladin"],
+  [1947, "Mage"], [1949, "Mage"], [1950, "Mage"], [1951, "Mage"],
+  [1953, "Mage"], [1954, "Mage"], [1955, "Mage"], [1956, "Mage"],
+  [7463, "Mage"], [7667, "Shaman"], [7668, "Shaman"], [8258, "Shaman"],
+  [7631, "Warlock"], [7502, "Warlock"], [7499, "Warrior"],
+  [7505, "Shaman"], [7498, "Rogue"], [7504, "Priest"],
+  [7500, "Mage"], [7506, "Druid"], [7503, "Hunter"], [7501, "Paladin"]
+]);
+
+export function questAvailableForClass(questId, className) {
+  const requiredClass = questClassRestrictions.get(Number(questId));
+  return !requiredClass || !className ||
+    String(className).trim().toLowerCase() === requiredClass.toLowerCase();
+}
+
 export const dungeonQuestSeries = [
   { id: "rfc-lost-satchel", name: "Lost Satchel", steps: [{ id: 5722 }, { id: 5724, after: [5722] }] },
   { id: "rfc-hidden-enemies", name: "Hidden Enemies", steps: [{ id: 5726 }, { id: 5727, after: [5726] }, { id: 5728, after: [5727] }] },

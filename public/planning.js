@@ -1,6 +1,6 @@
 import { dungeons, unlocks } from "./progress-catalog.js";
 import { esc, intro, validUrl, sortCompare, sortData, sortSelect } from "./ui.js";
-import { dungeonQuestById, dungeonQuestSeries } from "./dungeon-quests.js";
+import { dungeonQuestById, dungeonQuestSeries, questAvailableForClass } from "./dungeon-quests.js";
 import { queueMutation } from "./offline.js";
 
 const timeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
@@ -112,11 +112,14 @@ function characterDungeonQuestSection(character, progress, selectedDungeonId) {
     ...(character.activeQuestIds ?? []),
     ...(progress?.active?.quests ?? []).map(quest => quest.id)
   ].map(Number));
-  const selected = dungeons.some(dungeon => dungeon.id === selectedDungeonId && dungeonQuestById.has(dungeon.id));
+  const selectedGuide = dungeonQuestById.get(selectedDungeonId);
+  const selected = Boolean(selectedGuide?.quests.some(quest =>
+    questAvailableForClass(quest.id, character.className)));
   const rows = dungeons.map(dungeon => {
     const guide = dungeonQuestById.get(dungeon.id);
     if (!guide?.quests?.length) return "";
-    const quests = guide.quests;
+    const quests = guide.quests.filter(quest => questAvailableForClass(quest.id, character.className));
+    if (!quests.length) return "";
     const count = completedAvailable ? quests.filter(quest => completedIds.has(quest.id)).length : null;
     const summary = count === null
       ? quests.length + ' indexed quests · completion history unavailable'
@@ -243,8 +246,10 @@ function dungeonPriority(dungeon, data, activeQuests) {
   const characters = data.characters ?? [];
   const inRangeMembers = characters.filter(character => character.level >= minLevel && character.level <= maxLevel);
   const highestLevel = Math.max(0, ...characters.map(character => character.level ?? 0));
-  const active = (guide?.quests ?? []).reduce((sum, quest) => sum + (activeQuests.get(quest.id)?.length ?? 0), 0);
-  const shared = (guide?.quests ?? []).filter(quest => (activeQuests.get(quest.id)?.length ?? 0) > 1).length;
+  const activeMembers = quest => (activeQuests.get(quest.id) ?? [])
+    .filter(character => questAvailableForClass(quest.id, character.className));
+  const active = (guide?.quests ?? []).reduce((sum, quest) => sum + activeMembers(quest).length, 0);
+  const shared = (guide?.quests ?? []).filter(quest => activeMembers(quest).length > 1).length;
   return { dungeon, guide, active, shared, inRange: inRangeMembers.length, inRangeMembers, minLevel, levelDistance: Math.abs(highestLevel - maxLevel) };
 }
 
@@ -266,15 +271,24 @@ export function buildDungeonPlan(data) {
     .sort((left, right) => right.shared - left.shared || right.active - left.active || right.inRange - left.inRange || left.levelDistance - right.levelDistance || left.minLevel - right.minLevel);
   return ranked.map(row => ({
     ...row,
-    quests: (row.guide?.quests ?? []).map(quest => ({
-      ...quest,
-      active: activeQuests.get(quest.id) ?? [],
-      completedMembers: characters.filter(character => character.completedAvailable && completedQuests.get(quest.id)?.has(character.id)),
-      incompleteMembers: characters.filter(character => character.completedAvailable && !completedQuests.get(quest.id)?.has(character.id)),
-      unknownMembers: characters.filter(character => !character.completedAvailable),
-      completed: completedQuests.get(quest.id)?.size ?? 0,
-      checked: characters.filter(character => character.completedAvailable).length
-    }))
+    quests: (row.guide?.quests ?? [])
+      .filter(quest => characters.some(character => questAvailableForClass(quest.id, character.className)))
+      .map(quest => {
+        const eligibleMembers = characters.filter(character => questAvailableForClass(quest.id, character.className));
+        const checkedMembers = eligibleMembers.filter(character => character.completedAvailable);
+        const completedMembers = eligibleMembers.filter(character =>
+          character.completedAvailable && completedQuests.get(quest.id)?.has(character.id));
+        return {
+          ...quest,
+          eligibleMembers,
+          active: (activeQuests.get(quest.id) ?? []).filter(character => questAvailableForClass(quest.id, character.className)),
+          completedMembers,
+          incompleteMembers: checkedMembers.filter(character => !completedQuests.get(quest.id)?.has(character.id)),
+          unknownMembers: eligibleMembers.filter(character => !character.completedAvailable),
+          completed: completedMembers.length,
+          checked: checkedMembers.length
+        };
+      })
   }));
 }
 
@@ -298,20 +312,27 @@ function dungeonMatrix(characters, plan) {
 
   const rows = characters.map(character => {
     const history = character.completedAvailable && Array.isArray(character.completedQuestIds)
-      ? new Set(character.completedQuestIds) : null;
-    const completion = history ? allQuestIds.filter(questId => history.has(questId)).length : -1;
+      ? new Set(character.completedQuestIds.map(Number)) : null;
+    const eligibleQuestIds = allQuestIds.filter(questId => questAvailableForClass(questId, character.className));
+    const completion = history ? eligibleQuestIds.filter(questId => history.has(Number(questId))).length : -1;
     const sortKeys = { name: character.name, completion };
     const cells = columns.map(({ id, name, questIds }) => {
-      const total = questIds.length;
-      const count = total && history ? questIds.filter(questId => history.has(questId)).length : null;
+      const totalIndexed = questIds.length;
+      const availableQuestIds = questIds.filter(questId => questAvailableForClass(questId, character.className));
+      const total = availableQuestIds.length;
+      const notApplicable = totalIndexed > 0 && total === 0;
+      const count = total && history ? availableQuestIds.filter(questId => history.has(Number(questId))).length : null;
+      const status = notApplicable ? "not-applicable" : count === total ? "complete" : count === null ? "unknown" : "incomplete";
+      const label = notApplicable
+        ? "No indexed quests available for " + (character.className || "this") + " class"
+        : !totalIndexed ? "No quests indexed" : count === null ? "No Armory completion history"
+        : count + " of " + total + " class-available indexed quests complete";
+      const value = notApplicable ? "N/A" : !totalIndexed ? "No index" : count === null ? "No history"
+        : (status === "complete" ? "✓" : "×") + " " + count + "/" + total;
       sortKeys[id] = count;
-      const status = count === total ? "complete" : count === null ? "unknown" : "incomplete";
-      const label = !total ? "No quests indexed" : count === null ? "No Armory completion history"
-        : `${count} of ${total} indexed quests complete`;
-      const value = !total ? "No index" : count === null ? "No history"
-        : `${status === "complete" ? "✓" : "×"} ${count}/${total}`;
       const profileLabel = "Open " + character.name + "'s " + name + " quest details" +
-        (count === null ? " (completion history unavailable)" : ", " + count + " of " + total + " quests complete");
+        (notApplicable ? " (no quests indexed for this class)" : count === null ? " (completion history unavailable)" :
+          ", " + count + " of " + total + " quests complete");
       const href = "/character/" + encodeURIComponent(character.slug ?? character.id ?? "") +
         "/progress?dungeon=" + encodeURIComponent(id);
       const cellContent = total
@@ -332,6 +353,7 @@ function dungeonMatrix(characters, plan) {
       <li class="matrix-complete"><span aria-hidden="true">✓</span> All complete</li>
       <li class="matrix-incomplete"><span aria-hidden="true">×</span> Incomplete</li>
       <li class="matrix-unknown"><span aria-hidden="true">—</span> No history or quest index</li>
+      <li class="matrix-not-applicable"><span aria-hidden="true">N/A</span> No quests for this class</li>
     </ul>
   </div>`;
   const body = `<div class="matrix-scroll" data-matrix-scroll role="region" tabindex="0" aria-label="Scrollable dungeon quest matrix">
@@ -342,7 +364,7 @@ function dungeonMatrix(characters, plan) {
     </table>
   </div>
   <p class="empty" data-matrix-empty role="status" hidden>No matching dungeons.</p>
-  <p class="panel-note">Counts use the Planner’s quest index and the Armory’s completed quest history. Quest availability can depend on faction and prerequisites.</p>`;
+  <p class="panel-note">Counts use the Planner’s Horde and class-available quest index and the Armory’s completed quest history.</p>`;
   return collapsibleSection(title, "Scroll to compare dungeons and select a column heading to sort.", body, true, tools);
 }
 
@@ -400,9 +422,10 @@ function characterQuestSection(characters, plan) {
     ["quests:desc", "Most active quests"], ["quests:asc", "Fewest active quests"]
   ];
   const rows = characters.map(character => {
-    const activeIds = new Set(character.activeQuestIds ?? []);
+    const activeIds = new Set((character.activeQuestIds ?? []).map(Number));
     const groups = character.activeAvailable ? plan.map(({ dungeon, quests }) => ({
-      dungeon, quests: quests.filter(quest => activeIds.has(quest.id))
+      dungeon, quests: quests.filter(quest => activeIds.has(Number(quest.id)) &&
+        questAvailableForClass(quest.id, character.className))
     })).filter(group => group.quests.length) : [];
     const count = new Set(groups.flatMap(group => group.quests.map(quest => quest.id))).size;
     const status = character.activeAvailable
@@ -427,7 +450,9 @@ function personalizedTaskResult(character, plan) {
   const hasActive = Boolean(character.activeAvailable);
   const level = character.level == null || character.level === "" ? null : Number.isFinite(Number(character.level)) ? Number(character.level) : null;
   const recommendations = plan.map((row, index) => {
-    const quests = row.quests.filter(quest => !hasCompletion || !completedIds.has(Number(quest.id)));
+    const quests = row.quests.filter(quest =>
+      questAvailableForClass(quest.id, character.className) &&
+      (!hasCompletion || !completedIds.has(Number(quest.id))));
     if (!quests.length) return null;
     const items = quests.map(quest => {
       const active = activeIds.has(Number(quest.id));
