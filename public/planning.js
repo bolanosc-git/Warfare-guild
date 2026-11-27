@@ -353,6 +353,7 @@ function dungeonMatrix(characters, plan) {
       <li class="matrix-complete"><span aria-hidden="true">✓</span> All complete</li>
       <li class="matrix-incomplete"><span aria-hidden="true">×</span> Incomplete</li>
       <li class="matrix-unknown"><span aria-hidden="true">—</span> No history or quest index</li>
+      <li class="matrix-not-applicable"><span aria-hidden="true">N/A</span> No quests for this class</li>
     </ul>
   </div>`;
   const body = `<div class="matrix-scroll" data-matrix-scroll role="region" tabindex="0" aria-label="Scrollable dungeon quest matrix">
