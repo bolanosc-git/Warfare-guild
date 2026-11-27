@@ -2514,5 +2514,36 @@ export const dungeonQuestCatalog = rawDungeonQuestCatalog
     quests: dungeon.quests.filter(quest => !allianceOnlyQuestIds.has(quest.id))
   }));
 
+// Curated Forever quest chains. Steps may include prerequisite quests outside the dungeon index.
+export const dungeonQuestSeries = [
+  { id: "rfc-lost-satchel", name: "Lost Satchel", steps: [{ id: 5722 }, { id: 5724, after: [5722] }] },
+  { id: "rfc-hidden-enemies", name: "Hidden Enemies", steps: [{ id: 5726 }, { id: 5727, after: [5726] }, { id: 5728, after: [5727] }] },
+  { id: "wailing-oases", name: "The Forgotten Pools", steps: [{ id: 870 }, { id: 877, after: [870] }, { id: 880, after: [877] }, { id: 1489, after: [880] }, { id: 914, after: [1489] }] },
+  { id: "wailing-raptor-horns", name: "Raptor Horns", steps: [{ id: 865 }, { id: 1491, after: [865] }] },
+  { id: "excavation-dragonmaw", name: "Dragonmaw Rumors", steps: [{ id: 95663 }, { id: 95682, after: [95663] }] },
+  { id: "excavation-elder-knowledge", name: "Elder Knowledge", steps: [{ id: 95664 }, { id: 98823, after: [95664] }] },
+  { id: "gnomer-rig-wars", name: "Rig Wars", steps: [{ id: 2841 }, { id: 2842, after: [2841] }, { id: 2843, after: [2842] }] },
+  { id: "gnomer-ring", name: "The Grime-Encrusted Ring", steps: [{ id: 2945 }, { id: 2949, after: [2945] }, { id: 2950, after: [2949] }] },
+  { id: "scarlet-guano", name: "Going, Going, Guano!", steps: [{ id: 1109 }, { id: 1113, after: [1109] }] },
+  { id: "rfk-rfd-alliance", name: "An Unholy Alliance", steps: [{ id: 6522 }, { id: 6521, after: [6522] }] },
+  { id: "badlands-reagent-run", name: "Badlands Reagent Run", steps: [{ id: 2258 }, { id: 2202, after: [2258] }, { id: 2203, after: [2202] }] },
+  { id: "uldaman-necklace", name: "Necklace Recovery", steps: [{ id: 2283 }, { id: 2284, after: [2283] }, { id: 2341, after: [2284] }] },
+  { id: "uldaman-power", name: "Power in Uldaman", steps: [{ id: 1953 }, { id: 1954, after: [1953] }, { id: 1955, after: [1954] }, { id: 1956, after: [1955] }] },
+  { id: "wailing-glowing-shard", name: "The Glowing Shard", steps: [{ id: 6981 }, { id: 3369, after: [6981] }] },
+  { id: "drowned-city-brinescale", name: "Enemies in the Water", steps: [{ id: 629 }, { id: 95748 }, { id: 95773, after: [629, 95748] }, { id: 95776, after: [95773] }] },
+  { id: "zulfarrak-spider-god", name: "The Spider God", steps: [{ id: 2933 }, { id: 2934, after: [2933] }, { id: 2935, after: [2934] }, { id: 2936, after: [2935] }] },
+  { id: "mosharu-tablets", name: "The Prophecy of Mosh'aru", steps: [{ id: 3520 }, { id: 3527, after: [3520] }, { id: 4787, after: [3527] }, { id: 3528, after: [4787] }, { id: 5065, after: [3528] }, { id: 4788, after: [5065] }] },
+  { id: "rfd-scourge", name: "Scourge of the Downs", steps: [{ id: 3523 }, { id: 3525, after: [3523] }] },
+  { id: "dalaran-patrols", name: "Dalaran Patrols", steps: [{ id: 544 }, { id: 93680 }, { id: 545, after: [544, 93680] }] },
+  { id: "dalaran-disruption", name: "Blood in the Streets", steps: [{ id: 92434 }, { id: 96984, after: [92434] }] },
+  { id: "brd-dark-iron-officials", name: "Dark Iron Officials", steps: [{ id: 4081 }, { id: 4082, after: [4081] }, { id: 4122, after: [4082] }, { id: 4132, after: [4122] }] },
+  { id: "brd-disharmony", name: "Disharmony", steps: [{ id: 3906 }, { id: 3907, after: [3906] }] },
+  { id: "brd-taste-of-flame", name: "A Taste of Flame", steps: [{ id: 4023 }, { id: 4024, after: [4023] }] },
+  { id: "brd-machines", name: "The Rise of the Machines", steps: [{ id: 4061 }, { id: 4062, after: [4061] }, { id: 4063, after: [4062] }] },
+  { id: "brd-torch", name: "The Torch of Retribution", steps: [{ id: 3452 }, { id: 3453, after: [3452] }, { id: 3454, after: [3453] }] },
+  { id: "brd-squire-maltrake", name: "Squire Maltrake", steps: [{ id: 3462 }, { id: 3463, after: [3462] }] },
+  { id: "maraudon-scepter", name: "Legends of Maraudon", steps: [{ id: 7044 }, { id: 7046, after: [7044] }] }
+];
+
 export const dungeonQuestById = new Map(dungeonQuestCatalog.map(entry => [entry.dungeonId, entry]));
 export const questGuideUrl = "https://www.wowhead.com/forever/guide/dungeons/every-dungeon-quest-location";

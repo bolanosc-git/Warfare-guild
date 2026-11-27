@@ -425,7 +425,7 @@ document.addEventListener("click", event => {
   if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   status = "";
-  if (location.pathname !== link.pathname) history.pushState({}, "", link.pathname);
+  if (location.href !== link.href) history.pushState({}, "", link.href);
   render();
 });
 window.addEventListener("popstate", () => {
