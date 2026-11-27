@@ -2517,7 +2517,7 @@ export const dungeonQuestCatalog = rawDungeonQuestCatalog
 // Curated Forever quest chains. Steps may include prerequisite quests outside the dungeon index.
 // Class-only dungeon quests are restricted to the named character class.
 const questClassRestrictions = new Map([
-  [1740, "Warlock"], [95036, "Paladin"],
+  [1740, "Warlock"], [91858, "Paladin"], [95036, "Paladin"],
   [1947, "Mage"], [1949, "Mage"], [1950, "Mage"], [1951, "Mage"],
   [1953, "Mage"], [1954, "Mage"], [1955, "Mage"], [1956, "Mage"],
   [7463, "Mage"], [7667, "Shaman"], [7668, "Shaman"], [8258, "Shaman"],
