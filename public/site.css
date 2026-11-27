@@ -674,6 +674,42 @@ select {
 .dungeon-matrix tbody th { z-index: 1; background: var(--paper); }
 .dungeon-matrix tbody th small { display: block; color: var(--muted); font-size: .8125rem; font-weight: 400; }
 .dungeon-matrix td { text-align: center; font-size: .875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.matrix-cell-link {
+  display: inline-block;
+  min-height: 1.25rem;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.matrix-cell-link:hover { text-decoration-thickness: 2px; }
+.matrix-cell-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.task-series-group + .task-series-group { margin-top: 13px; }
+.task-series-group h4 { margin: 0 0 6px; color: var(--accent); font: 700 1rem/1.25 var(--display); }
+.task-series-group ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.task-series-group li {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+}
+.task-series-group li > a { overflow-wrap: anywhere; }
+.task-series-group li > small { flex-basis: 100%; margin-inline-start: 2px; color: var(--muted); }
+.status-series-wait { background: #3a303f; color: #e1c8ff; border-color: #796491; }
+.character-dungeon-quest { padding: 0 15px 14px; }
+.character-dungeon-quest > summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; padding: 13px 3px; }
+.character-dungeon-quest > summary .subtle { text-align: right; }
+.character-dungeon-quest > summary > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.character-quest-note { margin: 0 0 10px; color: var(--muted); font-size: .875rem; }
+.character-quest-steps li > a { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.character-dungeon-quest[data-selected-dungeon-quest] { scroll-margin-block-start: 1rem; }
+
 .matrix-visually-hidden {
   position: absolute;
   width: 1px;

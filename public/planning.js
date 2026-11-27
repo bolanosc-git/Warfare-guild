@@ -1,6 +1,6 @@
 import { dungeons, unlocks } from "./progress-catalog.js";
 import { esc, intro, validUrl, sortCompare, sortData, sortSelect } from "./ui.js";
-import { dungeonQuestById } from "./dungeon-quests.js";
+import { dungeonQuestById, dungeonQuestSeries } from "./dungeon-quests.js";
 import { queueMutation } from "./offline.js";
 
 const timeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
@@ -41,6 +41,114 @@ function listRow(title, detail, control = "", badge = "", sort = null) {
 
 function questList(quests) {
   return quests.map(quest => listRow(esc(quest.name), `Quest #${quest.id}`, "", "", { name: quest.name, id: quest.id })).join("");
+}
+
+function questSeriesFor(questId) {
+  const id = Number(questId);
+  return dungeonQuestSeries.find(series => series.steps.some(step => step.id === id)) ?? null;
+}
+
+function orderedQuestGroups(quests) {
+  const groups = [];
+  const bySeries = new Map();
+  const other = [];
+  for (const quest of quests) {
+    const series = questSeriesFor(quest.id);
+    if (!series) {
+      other.push(quest);
+      continue;
+    }
+    if (!bySeries.has(series.id)) {
+      const group = { series, quests: [] };
+      bySeries.set(series.id, group);
+      groups.push(group);
+    }
+    bySeries.get(series.id).quests.push(quest);
+  }
+  for (const group of groups) {
+    const order = new Map(group.series.steps.map((step, index) => [step.id, index]));
+    group.quests.sort((left, right) => (order.get(Number(left.id)) ?? 0) - (order.get(Number(right.id)) ?? 0));
+  }
+  if (other.length) groups.push({ series: null, quests: other });
+  return groups;
+}
+
+function renderQuestGroups(quests, listClass, renderQuest) {
+  return orderedQuestGroups(quests).map(group =>
+    '<section class="task-series-group">' +
+      '<h4>' + esc(group.series?.name ?? "Other quests") + '</h4>' +
+      '<ul class="' + listClass + '">' + group.quests.map(renderQuest).join("") + '</ul>' +
+    '</section>'
+  ).join("");
+}
+
+function activeSeriesPredecessor(questId, activeIds, completedIds) {
+  const targetId = Number(questId);
+  for (const series of dungeonQuestSeries) {
+    const steps = new Map(series.steps.map(step => [step.id, step]));
+    const target = steps.get(targetId);
+    if (!target) continue;
+    const pending = [...(target.after ?? [])];
+    const visited = new Set();
+    while (pending.length) {
+      const predecessorId = pending.shift();
+      if (visited.has(predecessorId)) continue;
+      visited.add(predecessorId);
+      if (activeIds.has(predecessorId) && !completedIds.has(predecessorId)) return predecessorId;
+      pending.push(...(steps.get(predecessorId)?.after ?? []));
+    }
+  }
+  return null;
+}
+
+function characterDungeonQuestSection(character, progress, selectedDungeonId) {
+  const completedAvailable = Boolean(character.completedAvailable || progress?.completed?.available);
+  const activeAvailable = Boolean(character.activeAvailable || progress?.active?.available);
+  const completedIds = new Set([
+    ...(character.completedQuestIds ?? []),
+    ...(progress?.completed?.quests ?? []).map(quest => quest.id)
+  ].map(Number));
+  const activeIds = new Set([
+    ...(character.activeQuestIds ?? []),
+    ...(progress?.active?.quests ?? []).map(quest => quest.id)
+  ].map(Number));
+  const selected = dungeons.some(dungeon => dungeon.id === selectedDungeonId && dungeonQuestById.has(dungeon.id));
+  const rows = dungeons.map(dungeon => {
+    const guide = dungeonQuestById.get(dungeon.id);
+    if (!guide?.quests?.length) return "";
+    const quests = guide.quests;
+    const count = completedAvailable ? quests.filter(quest => completedIds.has(quest.id)).length : null;
+    const summary = count === null
+      ? quests.length + ' indexed quests · completion history unavailable'
+      : count + '/' + quests.length + ' quests complete · ' + (quests.length - count) + ' missing';
+    const grouped = renderQuestGroups(quests, "character-quest-steps", quest => {
+      const complete = completedIds.has(quest.id);
+      const active = activeIds.has(quest.id);
+      const status = complete ? "Completed" : active ? "Active · not complete" : completedAvailable ? "Missing" : "Unverified";
+      const statusClass = complete ? "status-cleared" : active ? "status-partial" : "";
+      return '<li><span class="status-tag ' + statusClass + '">' + status + '</span>' +
+        wowheadQuest(quest) + '</li>';
+    });
+    const isSelected = dungeon.id === selectedDungeonId;
+    return '<details class="planner-details character-dungeon-quest"' +
+      (isSelected ? ' id="selected-dungeon-quest" data-selected-dungeon-quest open' : '') +
+      '>' +
+      '<summary><span><strong>' + esc(dungeon.name) + '</strong></span><span class="subtle">' + esc(summary) + '</span></summary>' +
+      (completedAvailable
+        ? '<p class="character-quest-note">' + (activeAvailable
+          ? 'Missing quests are not in completion history; Active means the quest is in the current log.'
+          : 'Missing quests are not in completion history; the active quest snapshot is unavailable.') + '</p>'
+        : '<p class="character-quest-note">Completion history is unavailable, so missing quest status cannot be confirmed.' +
+          (activeAvailable ? ' Active quests are still identified from the current log.' : '') + '</p>') +
+      grouped + '</details>';
+  }).join("");
+  const inner = rows || empty("No Horde dungeon quests are indexed.");
+  return collapsibleSection(
+    "Dungeon quest breakdown",
+    "Horde dungeon quest completion and any quests still missing from the character’s history.",
+    inner,
+    selected
+  );
 }
 
 function availableQuests(progress) {
@@ -193,7 +301,7 @@ function dungeonMatrix(characters, plan) {
       ? new Set(character.completedQuestIds) : null;
     const completion = history ? allQuestIds.filter(questId => history.has(questId)).length : -1;
     const sortKeys = { name: character.name, completion };
-    const cells = columns.map(({ id, questIds }) => {
+    const cells = columns.map(({ id, name, questIds }) => {
       const total = questIds.length;
       const count = total && history ? questIds.filter(questId => history.has(questId)).length : null;
       sortKeys[id] = count;
@@ -202,8 +310,16 @@ function dungeonMatrix(characters, plan) {
         : `${count} of ${total} indexed quests complete`;
       const value = !total ? "No index" : count === null ? "No history"
         : `${status === "complete" ? "✓" : "×"} ${count}/${total}`;
-      return `<td class="matrix-${status}" data-matrix-dungeon="${id}" title="${esc(label)}">
-        <span aria-hidden="true">${value}</span><span class="matrix-visually-hidden">${esc(label)}</span></td>`;
+      const profileLabel = "Open " + character.name + "'s " + name + " quest details" +
+        (count === null ? " (completion history unavailable)" : ", " + count + " of " + total + " quests complete");
+      const href = "/character/" + encodeURIComponent(character.slug ?? character.id ?? "") +
+        "/progress?dungeon=" + encodeURIComponent(id);
+      const cellContent = total
+        ? '<a class="matrix-cell-link" href="' + href + '" data-nav aria-label="' + esc(profileLabel) + '">' +
+          '<span aria-hidden="true">' + value + '</span></a>'
+        : '<span aria-hidden="true">' + value + '</span>';
+      return '<td class="matrix-' + status + '" data-matrix-dungeon="' + id + '" title="' + esc(label) + '">' +
+        cellContent + '<span class="matrix-visually-hidden">' + esc(label) + '</span></td>';
     }).join("");
     return `<tr ${sortData(sortKeys)}><th scope="row">${memberLink(character, true)}${character.level == null ? "" : `<small>Level ${esc(character.level)}</small>`}</th>${cells}</tr>`;
   }).join("");
@@ -305,22 +421,29 @@ function characterQuestSection(characters, plan) {
 }
 
 function personalizedTaskResult(character, plan) {
-  const completedIds = new Set(character.completedQuestIds ?? []);
-  const activeIds = new Set(character.activeQuestIds ?? []);
+  const completedIds = new Set((character.completedQuestIds ?? []).map(Number));
+  const activeIds = new Set((character.activeQuestIds ?? []).map(Number));
   const hasCompletion = Boolean(character.completedAvailable);
   const hasActive = Boolean(character.activeAvailable);
   const level = character.level == null || character.level === "" ? null : Number.isFinite(Number(character.level)) ? Number(character.level) : null;
   const recommendations = plan.map((row, index) => {
-    const quests = row.quests.filter(quest => !hasCompletion || !completedIds.has(quest.id));
+    const quests = row.quests.filter(quest => !hasCompletion || !completedIds.has(Number(quest.id)));
     if (!quests.length) return null;
-    const activeCount = quests.filter(quest => activeIds.has(quest.id)).length;
+    const items = quests.map(quest => {
+      const active = activeIds.has(Number(quest.id));
+      const blockedBy = !active && hasActive ? activeSeriesPredecessor(quest.id, activeIds, completedIds) : null;
+      return { quest, active, blockedBy };
+    });
+    const actionableCount = items.filter(item => !item.blockedBy).length;
+    const activeCount = items.filter(item => item.active).length;
     const sharedActive = quests.filter(quest => (quest.active ?? []).some(member => member.id !== character.id)).length;
     const [minLevel, maxLevel] = row.dungeon.levels.split(/[–-]/).map(Number);
     const inRange = level !== null && level >= minLevel && level <= maxLevel;
     const levelDistance = level === null ? Number.POSITIVE_INFINITY
       : level < minLevel ? minLevel - level : level > maxLevel ? level - maxLevel : 0;
-    return { row, quests, activeCount, sharedActive, inRange, levelDistance, index, minLevel };
+    return { row, items, quests, actionableCount, activeCount, sharedActive, inRange, levelDistance, index };
   }).filter(Boolean).sort((left, right) =>
+    right.actionableCount - left.actionableCount ||
     right.activeCount - left.activeCount ||
     right.sharedActive - left.sharedActive ||
     Number(right.inRange) - Number(left.inRange) ||
@@ -332,35 +455,44 @@ function personalizedTaskResult(character, plan) {
     const message = hasCompletion
       ? "All indexed Horde dungeon quests are complete for this character."
       : "No dungeon quest recommendations are available from the current roster data.";
-    return `<div class="task-list-result" data-personalized-task-list-for="${esc(character.id ?? character.slug)}" hidden><p class="empty">${esc(message)}</p></div>`;
+    return '<div class="task-list-result" data-personalized-task-list-for="' + esc(character.id ?? character.slug) + '" hidden><p class="empty">' + esc(message) + '</p></div>';
   }
   const recommendation = recommendations[0];
-  const { row, quests } = recommendation;
+  const { row, items, quests } = recommendation;
   const reasons = [];
-  if (recommendation.activeCount) reasons.push(`${recommendation.activeCount} quest${recommendation.activeCount === 1 ? "" : "s"} already active`);
-  if (recommendation.sharedActive) reasons.push(`${recommendation.sharedActive} quest${recommendation.sharedActive === 1 ? "" : "s"} also active for guild members`);
-  if (recommendation.inRange) reasons.push(`level ${level} is in the suggested range`);
-  const reasonText = reasons.length ? reasons.join(" · ") : `Closest level match for level ${level ?? "unknown"}`;
-  const guidance = hasCompletion
-    ? hasActive
-      ? "The list shows unfinished quests from the character’s Armory history. Pick up quests that are not active yet."
-      : "Completion history is available, but the active quest log is not; verify each quest before picking it up."
-    : "Completion history is unavailable, so check each quest before picking it up.";
-  const tasks = quests.map(quest => {
-    const active = activeIds.has(quest.id);
-    const action = active ? "Continue" : hasCompletion && hasActive ? "Pick up" : "Check status";
-    const statusClass = active ? "status-cleared" : "status-partial";
-    return `<li><span class="status-tag ${statusClass}">${action}</span>${wowheadQuest(quest)}</li>`;
-  }).join("");
+  if (recommendation.activeCount) reasons.push(recommendation.activeCount + ' quest' + (recommendation.activeCount === 1 ? '' : 's') + ' already active');
+  if (recommendation.sharedActive) reasons.push(recommendation.sharedActive + ' quest' + (recommendation.sharedActive === 1 ? '' : 's') + ' also active for guild members');
+  if (recommendation.inRange) reasons.push('level ' + level + ' is in the suggested range');
+  const reasonText = reasons.length ? reasons.join(" · ") : 'Closest level match for level ' + (level ?? "unknown");
+  const guidance = recommendation.actionableCount === 0
+    ? "The remaining quests follow an active series step. Complete the active quest first; later quests are not marked for pickup."
+    : hasCompletion
+      ? hasActive
+        ? "Grouped quests follow their series order. Pick up only available steps; later steps stay marked until the active prerequisite is complete."
+        : "Completion history is available, but the active quest log is not; verify each quest before picking it up."
+      : "Completion history is unavailable, so check each quest before picking it up.";
+  const itemById = new Map(items.map(item => [Number(item.quest.id), item]));
+  const tasks = renderQuestGroups(quests, "task-list-steps", quest => {
+    const item = itemById.get(Number(quest.id));
+    const action = item.active ? "Continue" : item.blockedBy ? "Later in series" : hasCompletion && hasActive ? "Pick up" : "Check status";
+    const statusClass = item.active ? "status-cleared" : item.blockedBy ? "status-series-wait" : "status-partial";
+    const note = item.blockedBy ? '<small>Wait until the active quest in this series is complete.</small>' : "";
+    return '<li><span class="status-tag ' + statusClass + '">' + action + '</span>' +
+      wowheadQuest(quest) + note + '</li>';
+  });
   const guide = row.guide?.guideUrl
-    ? `<a class="link" href="${esc(row.guide.guideUrl)}" target="_blank" rel="noopener">Dungeon guide</a>`
+    ? '<a class="link" href="' + esc(row.guide.guideUrl) + '" target="_blank" rel="noopener">Dungeon guide</a>'
     : "";
-  return `<div class="task-list-result" data-personalized-task-list-for="${esc(character.id ?? character.slug)}" hidden>
-    <h3>Recommended next dungeon: ${esc(row.dungeon.name)}</h3>
-    <p class="panel-note">${esc(reasonText)} · ${quests.length} ${hasCompletion ? "unfinished " : ""}${quests.length === 1 ? "quest" : "quests"}${hasCompletion ? "" : " to review"}.</p>
-    <p class="panel-note">${esc(guidance)} ${guide}</p>
-    <ul class="task-list-steps">${tasks}</ul>
-  </div>`;
+  const laterNote = recommendation.items.some(item => item.blockedBy)
+    ? '<p class="panel-note">Later series steps are shown for context and are not pickup recommendations.</p>' : "";
+  return '<div class="task-list-result" data-personalized-task-list-for="' + esc(character.id ?? character.slug) + '" hidden>' +
+    '<h3>' + (recommendation.actionableCount ? 'Recommended next dungeon: ' : 'Finish the active quest first: ') + esc(row.dungeon.name) + '</h3>' +
+    '<p class="panel-note">' + esc(reasonText) + ' · ' + recommendation.actionableCount + ' available step' +
+      (recommendation.actionableCount === 1 ? '' : 's') + (hasCompletion ? ' · ' + quests.length + ' unfinished indexed quest' +
+      (quests.length === 1 ? '' : 's') : ' to review') + '.</p>' +
+    '<p class="panel-note">' + esc(guidance) + ' ' + guide + '</p>' +
+    laterNote + tasks +
+  '</div>';
 }
 
 function personalizedTaskListSection(characters, plan) {
@@ -415,7 +547,9 @@ export function planningPage(view, data, character, status) {
   const entries = data.entries ?? [];
   let body;
   if (view === "character") {
-    body = character ? profileTabs(character, true) + availableQuests(data.progress) +
+    const selectedDungeonId = new URLSearchParams(location.search).get("dungeon");
+    body = character ? profileTabs(character, true) +
+      characterDungeonQuestSection(character, data.progress, selectedDungeonId) + availableQuests(data.progress) +
       dungeonChecklist(character, entries, data.progress, data.writable, data.logs) +
       unlockChecklist(character, entries, data.progress, data.writable) : "";
   } else if (view === "planner") {
@@ -509,6 +643,8 @@ export function bindPlanning(main, members, onSaved, completed) {
     const button = event.target.closest("[data-planning-action]");
     if (button) openPlanningDialog(dialog, JSON.parse(button.dataset.planningAction), members, onSaved);
   });
+  const selectedDungeonDetails = root.querySelector("[data-selected-dungeon-quest]");
+  if (selectedDungeonDetails) requestAnimationFrame(() => selectedDungeonDetails.scrollIntoView({ block: "start" }));
   const taskCharacter = root.querySelector("[data-task-list-character]");
   if (taskCharacter) {
     const taskLists = [...root.querySelectorAll("[data-personalized-task-list-for]")];
